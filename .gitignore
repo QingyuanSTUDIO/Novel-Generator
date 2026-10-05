@@ -1,0 +1,25 @@
+# Dependencies and generated build output
+node_modules/
+dist/
+
+# Local runtime and recovery data
+.tmp/
+electron-start.log
+*.log
+
+# TypeScript/Vite generated metadata
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+# Local editor and operating-system files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local application data and credentials
+*.qy
+*.key
+*.pem
+*.p12

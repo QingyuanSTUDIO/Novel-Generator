@@ -1,0 +1,996 @@
+/* Palette-derived coverage for controls and labels that predate the theme
+   system. Keep this file after styles.css in main.ts so theme choices win. */
+
+html[data-theme-mode] .crumb,
+html[data-theme-mode] .chapter-item,
+html[data-theme-mode] .volume-heading,
+html[data-theme-mode] .outline-tree-select,
+html[data-theme-mode] .resource-group-head,
+html[data-theme-mode] .paragraph-ai-heading,
+html[data-theme-mode] .compact-list dd,
+html[data-theme-mode] .evidence strong,
+html[data-theme-mode] .check-row,
+html[data-theme-mode] .json-structure-item,
+html[data-theme-mode] .json-detail-head h2,
+html[data-theme-mode] .holding-card-head h3,
+html[data-theme-mode] .card-detail-fields dd,
+html[data-theme-mode] .agent-quick-action,
+html[data-theme-mode] .agent-conversation-item,
+html[data-theme-mode] .agent-conversation-menu,
+html[data-theme-mode] .archived-conversation-item,
+html[data-theme-mode] .agent-message,
+html[data-theme-mode] .agent-plan-message,
+html[data-theme-mode] .agent-plan-list,
+html[data-theme-mode] .agent-task-list li,
+html[data-theme-mode] .agent-history-changes,
+html[data-theme-mode] .context-copy strong,
+html[data-theme-mode] .context-group-title strong,
+html[data-theme-mode] .context-item-copy strong,
+html[data-theme-mode] .context-orchestration-head h2,
+html[data-theme-mode] .context-item-row,
+html[data-theme-mode] .custom-field-summary,
+html[data-theme-mode] .custom-entry-field-label,
+html[data-theme-mode] .custom-module-create-form label,
+html[data-theme-mode] .custom-field-form label,
+html[data-theme-mode] .custom-entry-field label {
+  color: var(--theme-font);
+}
+
+html[data-theme-mode] .crumb strong,
+html[data-theme-mode] .agent-message-assistant,
+html[data-theme-mode] .agent-message-system,
+html[data-theme-mode] .agent-plan-message,
+html[data-theme-mode] .outline-tree-copy strong,
+html[data-theme-mode] .settings-resource-select,
+html[data-theme-mode] .resource-context-settings-head h3,
+html[data-theme-mode] .character-holdings .holding-card {
+  color: var(--theme-font);
+}
+
+html[data-theme-mode] .slash,
+html[data-theme-mode] .chapter-rail-head,
+html[data-theme-mode] .section-heading,
+html[data-theme-mode] .chapter-item small,
+html[data-theme-mode] .volume-heading small,
+html[data-theme-mode] .paragraph-editor-head,
+html[data-theme-mode] .paragraph-ai-request > span,
+html[data-theme-mode] .paragraph-ai-response > span,
+html[data-theme-mode] .paragraph-ai-waiting,
+html[data-theme-mode] .editor-footer,
+html[data-theme-mode] .cast-inferred,
+html[data-theme-mode] .compact-list dt,
+html[data-theme-mode] .evidence span,
+html[data-theme-mode] .check-row em,
+html[data-theme-mode] .header-stat,
+html[data-theme-mode] .json-structure-item span,
+html[data-theme-mode] .json-detail-head p,
+html[data-theme-mode] .world-engine-section-label small,
+html[data-theme-mode] .resource-group-head small,
+html[data-theme-mode] .resource-group-empty,
+html[data-theme-mode] .style-resource-switch,
+html[data-theme-mode] .provider-default-control,
+html[data-theme-mode] .api-status,
+html[data-theme-mode] .proxy-panel-head p,
+html[data-theme-mode] .settings-resource-summary,
+html[data-theme-mode] .holdings-header p,
+html[data-theme-mode] .card-modal-intro,
+html[data-theme-mode] .card-detail-summary,
+html[data-theme-mode] .card-detail-fields dt,
+html[data-theme-mode] .confirm-modal .card-modal-intro,
+html[data-theme-mode] .agent-heading p,
+html[data-theme-mode] .agent-panel-label,
+html[data-theme-mode] .agent-capability-note,
+html[data-theme-mode] .agent-conversation-note,
+html[data-theme-mode] .agent-conversation-item small,
+html[data-theme-mode] .agent-conversation-item span,
+html[data-theme-mode] .agent-conversations-empty,
+html[data-theme-mode] .agent-message-meta,
+html[data-theme-mode] .agent-plan-head strong,
+html[data-theme-mode] .agent-thinking,
+html[data-theme-mode] .agent-composer-footer span,
+html[data-theme-mode] .agent-task-list small,
+html[data-theme-mode] .agent-history-empty,
+html[data-theme-mode] .agent-history-item small,
+html[data-theme-mode] .context-copy span,
+html[data-theme-mode] .context-inspector p,
+html[data-theme-mode] .context-orchestration-head p,
+html[data-theme-mode] .context-orchestration-stats,
+html[data-theme-mode] .context-group-title span,
+html[data-theme-mode] .context-item-copy span,
+html[data-theme-mode] .context-items-empty,
+html[data-theme-mode] .outline-tree-copy small,
+html[data-theme-mode] .outline-tree-range,
+html[data-theme-mode] .outline-tree-summary,
+html[data-theme-mode] .custom-field-summary-copy small,
+html[data-theme-mode] .custom-field-summary-copy small,
+html[data-theme-mode] .custom-entry-json-preview,
+html[data-theme-mode] .custom-entry-field-description,
+html[data-theme-mode] .custom-entry-no-fields,
+html[data-theme-mode] .custom-module-list-copy small,
+html[data-theme-mode] .custom-module-list-arrow,
+html[data-theme-mode] .custom-enum-options-head,
+html[data-theme-mode] .custom-lock-toggle,
+html[data-theme-mode] .custom-entry-collapse {
+  color: var(--theme-muted);
+}
+html[data-theme-mode] .custom-entry-field-prompt-hint { color: var(--theme-button); }
+
+html[data-theme-mode] .chapter-search-clear,
+html[data-theme-mode] .paragraph-ai-trigger,
+html[data-theme-mode] .check-row svg,
+html[data-theme-mode] .world-engine-section-label svg,
+html[data-theme-mode] .world-engine-source strong,
+html[data-theme-mode] .world-engine-character > svg,
+html[data-theme-mode] .world-engine-proposal > svg,
+html[data-theme-mode] .world-engine-hook > svg,
+html[data-theme-mode] .world-engine-footer span:first-child,
+html[data-theme-mode] .world-engine-category-nav a > svg,
+html[data-theme-mode] .world-engine-resource-tile > svg,
+html[data-theme-mode] .world-engine-resource-tile b,
+html[data-theme-mode] .outline-tree-icon,
+html[data-theme-mode] .outline-tree-kind,
+html[data-theme-mode] .inspector-icon,
+html[data-theme-mode] .token-count,
+html[data-theme-mode] .custom-module-empty svg,
+html[data-theme-mode] .custom-lock-toggle svg,
+html[data-theme-mode] .custom-enum-option .icon-button {
+  color: var(--theme-button);
+}
+
+html[data-theme-mode] .chapter-search:focus-within,
+html[data-theme-mode] .volume-title-input:hover,
+html[data-theme-mode] .volume-title-input:focus,
+html[data-theme-mode] .volume-toggle:hover,
+html[data-theme-mode] .cast-tag-editor:focus-within,
+html[data-theme-mode] .outline-tree-toggle:hover,
+html[data-theme-mode] .expandable-textarea-toggle:hover,
+html[data-theme-mode] .custom-reference-tag .custom-reference-link:hover {
+  border-color: var(--theme-button);
+  color: var(--theme-button);
+}
+html[data-theme-mode] .chapter-search:focus-within,
+html[data-theme-mode] .volume-title-input:hover,
+html[data-theme-mode] .volume-title-input:focus,
+html[data-theme-mode] .volume-toggle:hover,
+html[data-theme-mode] .outline-tree-toggle:hover,
+html[data-theme-mode] .expandable-textarea-toggle:hover {
+  background: var(--theme-hover);
+}
+html[data-theme-mode] button:focus-visible,
+html[data-theme-mode] input:focus-visible,
+html[data-theme-mode] textarea:focus-visible,
+html[data-theme-mode] select:focus-visible {
+  outline-color: var(--theme-button);
+}
+html[data-theme-mode] .chapter-search:focus-within,
+html[data-theme-mode] .cast-tag-editor:focus-within,
+html[data-theme-mode] .form-field input:focus,
+html[data-theme-mode] .form-field textarea:focus,
+html[data-theme-mode] .form-field select:focus,
+html[data-theme-mode] .custom-module-create-form input:focus,
+html[data-theme-mode] .custom-module-editor input:focus,
+html[data-theme-mode] .custom-module-editor select:focus,
+html[data-theme-mode] .custom-module-editor textarea:focus {
+  border-color: var(--theme-button);
+  box-shadow: 0 0 0 2px var(--theme-focus-ring);
+}
+html[data-theme-mode] .volume-title-input:focus,
+html[data-theme-mode] .custom-entry-title:focus {
+  color: var(--theme-font);
+  background: var(--theme-input-bg) !important;
+}
+html[data-theme-mode] .chapter-search-clear:hover,
+html[data-theme-mode] .volume-toggle:hover,
+html[data-theme-mode] .paragraph-ai-trigger:hover,
+html[data-theme-mode] .cast-tag button:hover,
+html[data-theme-mode] .trigger-tag button:hover,
+html[data-theme-mode] .holding-tag.skill-tag:hover,
+html[data-theme-mode] .editor-menu-action:hover:not(:disabled),
+html[data-theme-mode] .context-group-collapse:hover,
+html[data-theme-mode] .custom-field-summary:hover,
+html[data-theme-mode] .custom-entry-collapse:hover {
+  color: var(--theme-button);
+  background: var(--theme-hover);
+}
+
+html[data-theme-mode] .trigger-tag button {
+  color: var(--theme-button);
+}
+
+html[data-theme-mode] .trigger-tag button:hover {
+  color: var(--theme-button-text);
+  background: var(--theme-button);
+}
+
+html[data-theme-mode] .storage-warning,
+html[data-theme-mode] .warning-note,
+html[data-theme-mode] .generation-error,
+html[data-theme-mode] .settings-error,
+html[data-theme-mode] .paragraph-ai-panel,
+html[data-theme-mode] .paragraph-ai-response p,
+html[data-theme-mode] .candidate-box,
+html[data-theme-mode] .json-code,
+html[data-theme-mode] .custom-module-empty-inline,
+html[data-theme-mode] .custom-module-detail-empty,
+html[data-theme-mode] .context-inspector,
+html[data-theme-mode] .context-group-body {
+  color: var(--theme-font);
+  background: var(--theme-surface);
+  border-color: var(--theme-border);
+}
+html[data-theme-mode] .warning-note,
+html[data-theme-mode] .generation-error,
+html[data-theme-mode] .settings-error,
+html[data-theme-mode] .paragraph-ai-panel {
+  background: var(--theme-accent-soft);
+}
+html[data-theme-mode] .warning-note {
+  border-left-color: var(--theme-button);
+}
+html[data-theme-mode] .warning-note svg {
+  color: var(--theme-button);
+}
+html[data-theme-mode] .storage-warning {
+  box-shadow: 0 5px 18px color-mix(in srgb, var(--theme-font) 18%, transparent);
+}
+html[data-theme-mode] .storage-warning-action,
+html[data-theme-mode] .expandable-textarea-toggle,
+html[data-theme-mode] .chapter-search-clear,
+html[data-theme-mode] .volume-toggle,
+html[data-theme-mode] .outline-tree-toggle,
+html[data-theme-mode] .context-group-collapse,
+html[data-theme-mode] .custom-entry-collapse {
+  color: var(--theme-muted);
+  border-color: var(--theme-border);
+  background: transparent;
+}
+html[data-theme-mode] .storage-warning-action:hover {
+  color: var(--theme-font);
+  border-color: var(--theme-button);
+  background: var(--theme-hover);
+}
+html[data-theme-mode] .status-tag-available,
+html[data-theme-mode] .status-tag-unconfigured {
+  color: var(--theme-font);
+  border-color: var(--theme-border);
+  background: var(--theme-accent-soft);
+}
+html[data-theme-mode] .status-tag-unconfigured {
+  background: var(--theme-neutral-soft);
+}
+html[data-theme-mode] .button.secondary {
+  color: var(--theme-font);
+  border-color: var(--theme-border);
+  background: var(--theme-surface-soft);
+}
+html[data-theme-mode] .button.secondary:hover:not(:disabled) {
+  border-color: var(--theme-button);
+  background: var(--theme-hover);
+}
+html[data-theme-mode] .form-success,
+html[data-theme-mode] .editor-menu-feedback:not(.error) {
+  color: var(--theme-button);
+}
+html[data-theme-mode] .status-tag-unconfigured,
+html[data-theme-mode] .save-status.error,
+html[data-theme-mode] .paragraph-ai-error,
+html[data-theme-mode] .generation-error,
+html[data-theme-mode] .settings-error,
+html[data-theme-mode] .editor-menu-feedback.error {
+  color: var(--theme-button);
+  border-color: var(--theme-border);
+}
+html[data-theme-mode] .api-status strong {
+  color: var(--theme-font);
+}
+html[data-theme-mode] .danger,
+html[data-theme-mode] .danger-button,
+html[data-theme-mode] .button.danger.subtle,
+html[data-theme-mode] .icon-button.danger,
+html[data-theme-mode] .editor-menu-action.danger,
+html[data-theme-mode] .agent-reset-tasks {
+  color: var(--theme-button);
+  border-color: var(--theme-border);
+}
+html[data-theme-mode] .button.danger.subtle,
+html[data-theme-mode] .button.danger.subtle:hover,
+html[data-theme-mode] .editor-menu-action.danger:hover {
+  background: var(--theme-accent-soft);
+}
+html[data-theme-mode] .button.danger-button {
+  color: var(--theme-button-text);
+  border-color: var(--theme-button);
+  background: var(--theme-button);
+}
+html[data-theme-mode] .button.danger-button:hover {
+  color: var(--theme-button-text);
+  border-color: var(--theme-button-hover);
+  background: var(--theme-button-hover);
+}
+
+html[data-theme-mode] .chapter-item.active,
+html[data-theme-mode] .outline-tree-row.selected,
+html[data-theme-mode] .custom-field-card.expanded,
+html[data-theme-mode] .custom-entry-card.expanded,
+html[data-theme-mode] .holding-tag.skill-tag {
+  border-color: var(--theme-button);
+  background: var(--theme-accent-soft);
+}
+html[data-theme-mode] .holding-tag.skill-tag {
+  color: var(--theme-font);
+}
+html[data-theme-mode] .outline-tree-row.selected {
+  box-shadow: 0 0 0 2px var(--theme-focus-ring);
+}
+html[data-theme-mode] .outline-tree-node::before,
+html[data-theme-mode] .outline-tree-row::after {
+  background: var(--theme-border);
+}
+html[data-theme-mode] .outline-tree-toggle:hover,
+html[data-theme-mode] .context-group-collapse:hover {
+  background: var(--theme-hover);
+}
+html[data-theme-mode] .resource-group.drop-target,
+html[data-theme-mode] .context-group-card.dragging {
+  border-color: var(--theme-button);
+  box-shadow: 0 0 0 2px var(--theme-focus-ring);
+}
+html[data-theme-mode] .resource-group-head,
+html[data-theme-mode] .custom-module-list-item,
+html[data-theme-mode] .agent-quick-action,
+html[data-theme-mode] .agent-conversation-item,
+html[data-theme-mode] .agent-new-conversation {
+  border-color: var(--theme-border);
+}
+html[data-theme-mode] .resource-group-head:hover,
+html[data-theme-mode] .custom-module-list-item:hover,
+html[data-theme-mode] .custom-module-list-item.selected,
+html[data-theme-mode] .custom-field-summary:hover,
+html[data-theme-mode] .custom-entry-head:hover,
+html[data-theme-mode] .context-group-card:hover,
+html[data-theme-mode] .agent-quick-action:hover,
+html[data-theme-mode] .agent-conversation-item:hover:not(:disabled),
+html[data-theme-mode] .agent-new-conversation:hover:not(:disabled) {
+  color: var(--theme-font);
+  border-color: var(--theme-button);
+  background: var(--theme-hover);
+}
+html[data-theme-mode] .agent-conversation-menu-trigger {
+  color: var(--theme-muted);
+}
+html[data-theme-mode] .agent-conversation-menu-trigger:hover:not(:disabled) {
+  color: var(--theme-font);
+  background: var(--theme-hover);
+}
+html[data-theme-mode] .agent-conversation-menu button {
+  color: var(--theme-font);
+}
+html[data-theme-mode] .agent-conversation-menu button:hover {
+  background: var(--theme-hover);
+}
+
+html[data-theme-mode] .cast-inferred-tag,
+html[data-theme-mode] .world-engine-event-icon,
+html[data-theme-mode] .world-engine-hook-status,
+html[data-theme-mode] .world-engine-event-status,
+html[data-theme-mode] .custom-field-index {
+  color: var(--theme-font);
+  border-color: var(--theme-border);
+  background: var(--theme-accent-soft);
+}
+html[data-theme-mode] .world-engine-footer span:first-child,
+html[data-theme-mode] .world-engine-section-label svg,
+html[data-theme-mode] .world-engine-source strong,
+html[data-theme-mode] .world-engine-character > svg,
+html[data-theme-mode] .world-engine-proposal > svg,
+html[data-theme-mode] .world-engine-hook > svg,
+html[data-theme-mode] .world-engine-category-nav a > svg,
+html[data-theme-mode] .world-engine-resource-tile > svg,
+html[data-theme-mode] .world-engine-resource-tile b {
+  color: var(--theme-button);
+}
+
+html[data-theme-mode] .agent-message-user {
+  color: var(--theme-button-text);
+  border-color: var(--theme-button);
+  background: var(--theme-button);
+}
+html[data-theme-mode] .agent-message-user .agent-message-meta {
+  color: color-mix(in srgb, var(--theme-button-text) 78%, var(--theme-button));
+}
+html[data-theme-mode] .agent-message-assistant,
+html[data-theme-mode] .agent-message-system,
+html[data-theme-mode] .agent-plan-card,
+html[data-theme-mode] .agent-quick-action,
+html[data-theme-mode] .agent-conversation-item,
+html[data-theme-mode] .agent-new-conversation,
+html[data-theme-mode] .agent-history-item,
+html[data-theme-mode] .context-block,
+html[data-theme-mode] .context-group-card {
+  color: var(--theme-font);
+  border-color: var(--theme-border);
+  background: var(--theme-surface);
+}
+html[data-theme-mode] .agent-message-system,
+html[data-theme-mode] .agent-plan-card {
+  background: var(--theme-accent-soft);
+}
+html[data-theme-mode] .agent-message-system,
+html[data-theme-mode] .paragraph-ai-panel {
+  border-left-color: var(--theme-button);
+}
+html[data-theme-mode] .agent-plan-head strong,
+html[data-theme-mode] .agent-activity-head strong,
+html[data-theme-mode] .agent-task-running .agent-task-icon,
+html[data-theme-mode] .agent-task-running strong,
+html[data-theme-mode] .agent-task-done .agent-task-icon,
+html[data-theme-mode] .agent-task-error .agent-task-icon,
+html[data-theme-mode] .agent-task-icon,
+html[data-theme-mode] .agent-reset-tasks,
+html[data-theme-mode] .agent-quick-action:hover {
+  color: var(--theme-button);
+}
+html[data-theme-mode] .agent-history-undo {
+  color: var(--theme-button);
+  background: var(--theme-accent-soft);
+}
+html[data-theme-mode] .agent-history-undo:hover:not(:disabled) {
+  color: var(--theme-font);
+  background: var(--theme-hover);
+}
+html[data-theme-mode] .agent-history-undo:disabled {
+  color: var(--theme-muted);
+  background: var(--theme-neutral-soft);
+}
+
+html[data-theme-mode] .context-group-body,
+html[data-theme-mode] .context-item-row,
+html[data-theme-mode] .summary-line {
+  border-color: var(--theme-border-soft);
+}
+html[data-theme-mode] .context-group-grip,
+html[data-theme-mode] .context-item-grip,
+html[data-theme-mode] .drag-handle {
+  color: var(--theme-muted);
+}
+html[data-theme-mode] .context-inspector .inspector-icon {
+  color: var(--theme-button);
+  background: var(--theme-accent-soft);
+}
+html[data-theme-mode] .summary-line {
+  color: var(--theme-muted);
+}
+html[data-theme-mode] .summary-line strong,
+html[data-theme-mode] .context-orchestration-stats strong {
+  color: var(--theme-font);
+}
+html[data-theme-mode] .toggle-track,
+html[data-theme-mode] .toggle {
+  background: var(--theme-border);
+}
+html[data-theme-mode] .style-resource-switch[aria-checked="true"] .toggle-track,
+html[data-theme-mode] .toggle[aria-pressed="true"] {
+  background: var(--theme-button);
+}
+html[data-theme-mode] .toggle-track > span,
+html[data-theme-mode] .toggle span {
+  background: var(--theme-button-text);
+}
+html[data-theme-mode] .style-resource-switch:focus-visible {
+  outline-color: var(--theme-button);
+}
+html[data-theme-mode] .provider-default-control input,
+html[data-theme-mode] .custom-entry-field input[type="checkbox"] {
+  accent-color: var(--theme-button);
+}
+
+html[data-theme-mode] .custom-module-list-icon,
+html[data-theme-mode] .custom-field-index,
+html[data-theme-mode] .custom-module-section-head h3 small {
+  color: var(--theme-font);
+  background: var(--theme-accent-soft);
+}
+html[data-theme-mode] .custom-field-grip,
+html[data-theme-mode] .custom-field-chevron,
+html[data-theme-mode] .custom-entry-collapse,
+html[data-theme-mode] .custom-module-list-arrow,
+html[data-theme-mode] .custom-lock-toggle svg {
+  color: var(--theme-muted);
+}
+html[data-theme-mode] .custom-field-card.expanded,
+html[data-theme-mode] .custom-entry-card.expanded {
+  border-color: var(--theme-button);
+}
+html[data-theme-mode] .custom-enum-option .icon-button,
+html[data-theme-mode] .custom-module-editor-actions .icon-button.danger,
+html[data-theme-mode] .custom-entry-head .icon-button.danger {
+  color: var(--theme-button);
+}
+html[data-theme-mode] .custom-reference-tag .custom-reference-link:hover {
+  color: var(--theme-button);
+}
+html[data-theme-mode] .custom-module-description-input {
+  color: var(--theme-muted) !important;
+}
+html[data-theme-mode] .outline-tree-range,
+html[data-theme-mode] .outline-tree-summary {
+  color: var(--theme-muted);
+}
+html[data-theme-mode] .group-modal {
+  border-color: var(--theme-border);
+}
+
+/* Keep the remaining legacy controls and page-specific labels inside the
+   active palette. These selectors cover controls that still carry fixed
+   green/gray values in the baseline stylesheet, especially on the world
+   book, outline, world engine, custom module and JSON inspector pages. */
+html[data-theme-mode] .switch-label,
+html[data-theme-mode] .provider-default-control,
+html[data-theme-mode] .resource-context-settings-head h3,
+html[data-theme-mode] .outline-tree-select,
+html[data-theme-mode] .outline-tree-copy strong,
+html[data-theme-mode] .outline-tree-kind,
+html[data-theme-mode] .custom-module-sidebar-head strong,
+html[data-theme-mode] .custom-module-list-item,
+html[data-theme-mode] .custom-module-section-head h3,
+html[data-theme-mode] .custom-field-summary,
+html[data-theme-mode] .json-structure-item strong,
+html[data-theme-mode] .json-detail-head h2,
+html[data-theme-mode] .settings-nav-item {
+  color: var(--theme-font);
+}
+
+html[data-theme-mode] .settings-nav-item small,
+html[data-theme-mode] .outline-tree-copy small,
+html[data-theme-mode] .outline-tree-range,
+html[data-theme-mode] .outline-tree-summary,
+html[data-theme-mode] .custom-module-list-copy small,
+html[data-theme-mode] .custom-module-list-arrow,
+html[data-theme-mode] .custom-module-section-head p,
+html[data-theme-mode] .json-structure-item span,
+html[data-theme-mode] .json-detail-head p {
+  color: var(--theme-muted);
+}
+
+html[data-theme-mode] .settings-nav-item.selected {
+  color: var(--theme-button);
+  border-color: var(--theme-button);
+  background: var(--theme-accent-soft);
+}
+
+html[data-theme-mode] .switch-label input,
+html[data-theme-mode] .provider-default-control input,
+html[data-theme-mode] .custom-entry-field input[type="checkbox"] {
+  accent-color: var(--theme-button);
+}
+
+html[data-theme-mode] .outline-tree-toggle,
+html[data-theme-mode] .outline-tree-icon,
+html[data-theme-mode] .outline-tree-kind,
+html[data-theme-mode] .custom-module-list-icon,
+html[data-theme-mode] .custom-field-index,
+html[data-theme-mode] .custom-field-grip,
+html[data-theme-mode] .custom-field-chevron,
+html[data-theme-mode] .custom-entry-collapse,
+html[data-theme-mode] .custom-lock-toggle svg {
+  color: var(--theme-button);
+}
+
+html[data-theme-mode] .outline-tree-toggle:hover,
+html[data-theme-mode] .custom-module-list-item:hover,
+html[data-theme-mode] .custom-field-summary:hover,
+html[data-theme-mode] .custom-entry-head:hover {
+  color: var(--theme-font);
+  background: var(--theme-hover);
+}
+
+html[data-theme-mode] .json-structure-item,
+html[data-theme-mode] .json-structure-detail,
+html[data-theme-mode] .custom-module-sidebar,
+html[data-theme-mode] .custom-module-editor,
+html[data-theme-mode] .custom-field-card,
+html[data-theme-mode] .custom-entry-card {
+  color: var(--theme-font);
+  background: var(--theme-surface);
+  border-color: var(--theme-border);
+}
+
+html[data-theme-mode] .json-structure-item.selected,
+html[data-theme-mode] .custom-module-list-item.selected,
+html[data-theme-mode] .custom-field-card.expanded,
+html[data-theme-mode] .custom-entry-card.expanded {
+  color: var(--theme-font);
+  background: var(--theme-accent-soft);
+  border-color: var(--theme-button);
+}
+
+/* World engine has a second, compact stylesheet in the component. Override
+   both the overview cards and the time/pipeline details together. */
+html[data-theme-mode] .world-engine-time-panel,
+html[data-theme-mode] .world-engine-time-stat {
+  color: var(--theme-font);
+  background: var(--theme-surface);
+  border-color: var(--theme-border);
+}
+
+html[data-theme-mode] .world-engine-time-head h3,
+html[data-theme-mode] .world-engine-time-stat strong,
+html[data-theme-mode] .world-engine-timeline-item span,
+html[data-theme-mode] .world-engine-event-source,
+html[data-theme-mode] .world-engine-event-review,
+html[data-theme-mode] .world-engine-event-lock {
+  color: var(--theme-font);
+}
+
+html[data-theme-mode] .world-engine-time-head p,
+html[data-theme-mode] .world-engine-time-select,
+html[data-theme-mode] .world-engine-time-custom,
+html[data-theme-mode] .world-engine-time-stat span,
+html[data-theme-mode] .world-engine-time-stat small,
+html[data-theme-mode] .world-engine-time-reason,
+html[data-theme-mode] .world-engine-timeline-item time {
+  color: var(--theme-muted);
+}
+
+html[data-theme-mode] .world-engine-time-select select,
+html[data-theme-mode] .world-engine-time-custom input,
+html[data-theme-mode] .world-engine-event-lock {
+  color: var(--theme-font);
+  background: var(--theme-input-bg);
+  border-color: var(--theme-border);
+}
+
+html[data-theme-mode] .world-engine-time-select select:focus,
+html[data-theme-mode] .world-engine-time-custom input:focus,
+html[data-theme-mode] .world-engine-event-form input:focus {
+  border-color: var(--theme-button);
+  box-shadow: 0 0 0 2px var(--theme-focus-ring);
+}
+
+html[data-theme-mode] .world-engine-event-icon,
+html[data-theme-mode] .world-engine-event-icon svg,
+html[data-theme-mode] .world-engine-character svg,
+html[data-theme-mode] .world-engine-proposal svg,
+html[data-theme-mode] .world-engine-hook > svg,
+html[data-theme-mode] .world-engine-time-reason svg,
+html[data-theme-mode] .world-engine-source svg,
+html[data-theme-mode] .world-engine-section-label svg,
+html[data-theme-mode] .world-engine-category-nav a > svg,
+html[data-theme-mode] .world-engine-resource-tile > svg {
+  color: var(--theme-button);
+}
+
+html[data-theme-mode] .world-engine-event-icon,
+html[data-theme-mode] .world-engine-event-status,
+html[data-theme-mode] .world-engine-hook-status,
+html[data-theme-mode] .world-engine-relationship-label,
+html[data-theme-mode] .world-engine-card-count {
+  background: var(--theme-accent-soft);
+  border-color: var(--theme-border);
+}
+
+/* Native scrollbars were still using the browser light defaults in the
+   night palette. Keep tracks, thumbs and hover states tied to the palette. */
+html[data-theme-mode] * {
+  scrollbar-color: var(--theme-border) var(--theme-surface);
+  scrollbar-width: thin;
+}
+
+html[data-theme-mode] *::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+html[data-theme-mode] *::-webkit-scrollbar-track {
+  background: var(--theme-surface);
+}
+
+html[data-theme-mode] *::-webkit-scrollbar-thumb {
+  border: 2px solid var(--theme-surface);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--theme-border) 70%, var(--theme-font) 30%);
+}
+
+html[data-theme-mode] *::-webkit-scrollbar-thumb:hover {
+  background: var(--theme-button);
+}
+
+/* Final coverage for resource forms and status glyphs that still inherited
+   the original green light-theme values in dark mode. These selectors are
+   intentionally kept in the palette override sheet so the day-theme baseline
+   remains unchanged. */
+html[data-theme-mode] .switch-label,
+html[data-theme-mode] .resource-setting-toggle,
+html[data-theme-mode] .resource-context-settings-head h3,
+html[data-theme-mode] .custom-module-sidebar-head strong,
+html[data-theme-mode] .custom-module-list-item,
+html[data-theme-mode] .custom-module-detail-empty strong,
+html[data-theme-mode] .json-structure-item strong {
+  color: var(--theme-font);
+}
+
+html[data-theme-mode] .switch-label input,
+html[data-theme-mode] .resource-setting-toggle input,
+html[data-theme-mode] .custom-entry-field input[type="checkbox"] {
+  accent-color: var(--theme-button);
+}
+
+html[data-theme-mode] .field-lock-button,
+html[data-theme-mode] .field-lock-button.locked,
+html[data-theme-mode] .entry-review-badges .field-lock-button,
+html[data-theme-mode] .custom-lock-toggle svg,
+html[data-theme-mode] .custom-entry-collapse,
+html[data-theme-mode] .custom-field-grip,
+html[data-theme-mode] .custom-field-chevron {
+  color: var(--theme-muted);
+}
+
+html[data-theme-mode] .field-lock-button:hover,
+html[data-theme-mode] .custom-lock-toggle:hover,
+html[data-theme-mode] .custom-entry-collapse:hover {
+  color: var(--theme-button);
+  background: var(--theme-hover);
+}
+
+html[data-theme-mode] .field-lock-button.locked,
+html[data-theme-mode] .custom-lock-button.locked {
+  color: var(--theme-button);
+}
+
+html[data-theme-mode] .custom-lock-button {
+  color: var(--theme-muted);
+  border-color: transparent;
+  background: transparent;
+}
+
+html[data-theme-mode] .custom-lock-button:hover:not(:disabled) {
+  color: var(--theme-button);
+  border-color: var(--theme-border);
+  background: var(--theme-hover);
+}
+
+html[data-theme-mode] .resource-item-meta,
+html[data-theme-mode] .resource-item-meta .resource-summary,
+html[data-theme-mode] .resource-trigger-status,
+html[data-theme-mode] .resource-group-head,
+html[data-theme-mode] .resource-group-head small,
+html[data-theme-mode] .resource-group-empty {
+  color: var(--theme-font);
+}
+
+html[data-theme-mode] .resource-item-meta .resource-summary,
+html[data-theme-mode] .resource-group-head small,
+html[data-theme-mode] .resource-group-empty {
+  color: var(--theme-muted);
+}
+
+html[data-theme-mode] .outline-tree-copy strong,
+html[data-theme-mode] .outline-tree-copy small,
+html[data-theme-mode] .outline-tree-range,
+html[data-theme-mode] .outline-tree-summary,
+html[data-theme-mode] .outline-tree-kind {
+  color: var(--theme-muted);
+}
+
+html[data-theme-mode] .outline-tree-copy strong {
+  color: var(--theme-font);
+}
+
+html[data-theme-mode] .world-engine-panel,
+html[data-theme-mode] .world-engine-stat,
+html[data-theme-mode] .world-engine-card,
+html[data-theme-mode] .world-engine-category-nav a,
+html[data-theme-mode] .world-engine-relationship,
+html[data-theme-mode] .world-engine-resource-tile,
+html[data-theme-mode] .world-engine-proposal {
+  color: var(--theme-font);
+  background: var(--theme-surface-soft);
+  border-color: var(--theme-border);
+}
+
+html[data-theme-mode] .world-engine-heading h2,
+html[data-theme-mode] .world-engine-stat strong,
+html[data-theme-mode] .world-engine-card-head h3,
+html[data-theme-mode] .world-engine-event strong,
+html[data-theme-mode] .world-engine-character strong,
+html[data-theme-mode] .world-engine-relationship-names,
+html[data-theme-mode] .world-engine-resource-tile strong,
+html[data-theme-mode] .world-engine-hook-copy strong,
+html[data-theme-mode] .world-engine-category-nav a strong {
+  color: var(--theme-font);
+}
+
+html[data-theme-mode] .world-engine-heading p,
+html[data-theme-mode] .world-engine-stat span,
+html[data-theme-mode] .world-engine-stat small,
+html[data-theme-mode] .world-engine-card-subtitle,
+html[data-theme-mode] .world-engine-event p,
+html[data-theme-mode] .world-engine-character p,
+html[data-theme-mode] .world-engine-relationship p,
+html[data-theme-mode] .world-engine-relationship small,
+html[data-theme-mode] .world-engine-resource-tile p,
+html[data-theme-mode] .world-engine-hook-copy small,
+html[data-theme-mode] .world-engine-category-nav a small,
+html[data-theme-mode] .world-engine-timeline-item time,
+html[data-theme-mode] .world-engine-footer,
+html[data-theme-mode] .world-engine-source,
+html[data-theme-mode] .world-engine-section-label small {
+  color: var(--theme-muted);
+}
+
+html[data-theme-mode] .world-engine-empty svg,
+html[data-theme-mode] .world-engine-relationship-names svg,
+html[data-theme-mode] .world-engine-event-icon,
+html[data-theme-mode] .world-engine-character > svg,
+html[data-theme-mode] .world-engine-proposal > svg,
+html[data-theme-mode] .world-engine-hook > svg,
+html[data-theme-mode] .world-engine-category-nav a > svg,
+html[data-theme-mode] .world-engine-resource-tile > svg {
+  color: var(--theme-button);
+}
+
+html[data-theme-mode] .world-engine-card-head,
+html[data-theme-mode] .world-engine-event,
+html[data-theme-mode] .world-engine-character,
+html[data-theme-mode] .world-engine-timeline-item,
+html[data-theme-mode] .world-engine-hook,
+html[data-theme-mode] .world-engine-footer {
+  border-color: var(--theme-border-soft);
+}
+
+html[data-theme-mode] .world-engine-empty,
+html[data-theme-mode] .world-engine-sources,
+html[data-theme-mode] .world-engine-source,
+html[data-theme-mode] .world-engine-category-nav a,
+html[data-theme-mode] .world-engine-relationship,
+html[data-theme-mode] .world-engine-resource-tile,
+html[data-theme-mode] .world-engine-proposal {
+  background: var(--theme-secondary);
+}
+
+/* Last-mile coverage for nested labels and empty states. Several of these
+   controls have their own explicit light-theme color, so inheriting from the
+   themed parent is not sufficient. */
+html[data-theme-mode] .check-row > span,
+html[data-theme-mode] .check-row > em,
+html[data-theme-mode] .switch-label > span,
+html[data-theme-mode] .resource-setting-toggle > span,
+html[data-theme-mode] .form-field > span,
+html[data-theme-mode] .field-label-row > span,
+html[data-theme-mode] .outline-tree-toggle-empty,
+html[data-theme-mode] .custom-module-list-copy strong,
+html[data-theme-mode] .custom-module-detail-empty strong,
+html[data-theme-mode] .json-structure-item strong {
+  color: var(--theme-font) !important;
+}
+
+/* Desktop file menu
+ *
+ * The custom title bar is rendered outside the regular page surfaces. Keep
+ * its file menu on the same palette path as the rest of the application so
+ * both the light/dark mode switch and the per-mode color settings apply to
+ * the menu itself (including the recent-file rows and disabled hints).
+ */
+html[data-theme-mode] .desktop-file-trigger {
+  color: var(--theme-button);
+  border-color: transparent;
+  background: transparent;
+}
+
+html[data-theme-mode] .desktop-file-trigger:hover,
+html[data-theme-mode] .desktop-file-trigger[aria-expanded='true'] {
+  color: var(--theme-button);
+  border-color: var(--theme-button);
+  background: var(--theme-hover);
+}
+
+html[data-theme-mode] .desktop-file-dropdown {
+  color: var(--theme-font);
+  border-color: var(--theme-border);
+  background: var(--theme-surface);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--theme-font) 24%, transparent);
+}
+
+html[data-theme-mode] .desktop-file-dropdown > button,
+html[data-theme-mode] .desktop-file-recent > button {
+  color: var(--theme-font);
+  background: transparent;
+}
+
+html[data-theme-mode] .desktop-file-dropdown > button:hover,
+html[data-theme-mode] .desktop-file-recent > button:hover {
+  color: var(--theme-font);
+  background: var(--theme-hover);
+}
+
+html[data-theme-mode] .desktop-file-dropdown > button:disabled {
+  color: var(--theme-muted);
+}
+
+html[data-theme-mode] .desktop-file-dropdown > button small,
+html[data-theme-mode] .desktop-file-recent > span,
+html[data-theme-mode] .desktop-file-recent > button small,
+html[data-theme-mode] .desktop-file-empty {
+  color: var(--theme-muted);
+}
+
+html[data-theme-mode] .desktop-file-recent {
+  border-top-color: var(--theme-border);
+}
+
+/* Keep the brand mark optically centered in the compact title bar. The
+   original QY artwork has a longer lower stroke, so a tiny vertical nudge
+   prevents it from reading as if it is leaning against the text baseline. */
+html[data-theme-mode] .desktop-titlebar-logo,
+.desktop-titlebar-logo {
+  display: block;
+  align-self: center;
+  margin-right: -5px;
+  transform: translateY(3px);
+}
+
+html[data-theme-mode] .sidebar-brand-logo,
+.sidebar-brand-logo {
+  display: block;
+  align-self: center;
+  margin-right: -5px;
+  transform: translateY(3px);
+}
+
+.settings-nav-item .settings-agent-icon {
+  display: block;
+  flex: 0 0 auto;
+  color: currentColor;
+}
+
+.agent-fab-logo {
+  display: block;
+  align-self: center;
+  justify-self: center;
+  transform: translateY(1px);
+  background-color: var(--theme-button-text) !important;
+}
+
+html[data-theme-mode] .project-switcher:hover,
+html[data-theme-mode] .project-switcher[aria-expanded="true"],
+html[data-theme-mode] .nav-add-button:hover,
+html[data-theme-mode] .chapter-title-editor:hover,
+html[data-theme-mode] .holding-tag:hover {
+  color: var(--theme-button);
+  border-color: var(--theme-button);
+  background: var(--theme-hover);
+}
+
+html[data-theme-mode] .sidebar-bottom,
+html[data-theme-mode] .chapter-actions,
+html[data-theme-mode] .editor-toolbar,
+html[data-theme-mode] .outline-structure-editor {
+  border-color: var(--theme-border);
+}
+
+html[data-theme-mode] .trigger-tag-editor:focus-within {
+  border-color: var(--theme-button);
+  box-shadow: 0 0 0 3px var(--theme-focus-ring);
+}
+
+html[data-theme-mode] .check-row > em,
+html[data-theme-mode] .form-field > small,
+html[data-theme-mode] .custom-module-list-copy small,
+html[data-theme-mode] .custom-module-empty > span,
+html[data-theme-mode] .custom-module-detail-empty > span,
+html[data-theme-mode] .json-structure-item > span {
+  color: var(--theme-muted) !important;
+}
+
+html[data-theme-mode] .check-row > svg,
+html[data-theme-mode] .custom-module-empty > svg,
+html[data-theme-mode] .custom-module-detail-empty > svg,
+html[data-theme-mode] .outline-tree-toggle-empty + .outline-tree-select .outline-tree-icon {
+  color: var(--theme-button) !important;
+}
+
+html[data-theme-mode] .custom-module-list-copy strong,
+html[data-theme-mode] .custom-module-detail-empty strong,
+html[data-theme-mode] .json-structure-item strong {
+  color: var(--theme-font) !important;
+}

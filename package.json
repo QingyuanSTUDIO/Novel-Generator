@@ -1,0 +1,26 @@
+{
+  "name": "novel-generator",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "electron/main.mjs",
+  "scripts": {
+    "test": "node --test",
+    "server": "node server/index.mjs",
+    "build": "vue-tsc -b && vite build",
+    "desktop:dev": "node scripts/desktop-dev.mjs",
+    "desktop": "npm run build && node scripts/desktop.mjs"
+  },
+  "dependencies": {
+    "@vueuse/core": "^13.9.0",
+    "lucide-vue-next": "^0.468.0",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "electron": "^44.5.1",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7",
+    "vue-tsc": "^2.2.0"
+  }
+}

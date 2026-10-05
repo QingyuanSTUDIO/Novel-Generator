@@ -1,0 +1,153 @@
+/*
+ * Semantic status palette.
+ *
+ * The four status colors are user-configurable through ThemeSettings and are
+ * assigned by App.vue to --theme-success, --theme-danger, --theme-warning and
+ * --theme-info. This file owns status meaning only; layout and surface colors
+ * remain in the existing component styles.
+ */
+
+:root {
+  --theme-success: #3f8255;
+  --theme-danger: #b24f4f;
+  --theme-danger-text: #ffffff;
+  --theme-warning: #956a25;
+  --theme-info: #466c86;
+  --theme-neutral-soft: #eef2ef;
+}
+
+html[data-theme-mode="dark"] {
+  --theme-success: #79c28a;
+  --theme-danger: #f18b83;
+  --theme-danger-text: #18231c;
+  --theme-warning: #e8b55f;
+  --theme-info: #82b7db;
+  --theme-neutral-soft: #26352b;
+}
+
+/* API connection state. Keep these hues distinct from the active theme
+   button color so “可用” and “未配置” remain immediately recognizable. */
+html[data-theme-mode] .status-tag-available {
+  color: var(--theme-success);
+  border-color: color-mix(in srgb, var(--theme-success) 54%, var(--theme-secondary));
+  background: color-mix(in srgb, var(--theme-secondary) 82%, var(--theme-success) 18%);
+}
+
+html[data-theme-mode] .status-tag-unconfigured {
+  color: var(--theme-danger);
+  border-color: color-mix(in srgb, var(--theme-danger) 54%, var(--theme-secondary));
+  background: color-mix(in srgb, var(--theme-secondary) 82%, var(--theme-danger) 18%);
+}
+
+/* Resource provenance and review status. */
+html[data-theme-mode] .entry-source-chip.agent-created,
+html[data-theme-mode] .world-engine-event-source.agent,
+html[data-theme-mode] .origin-badge.agent {
+  color: var(--theme-info);
+  border-color: color-mix(in srgb, var(--theme-info) 48%, var(--theme-secondary));
+  background: color-mix(in srgb, var(--theme-secondary) 82%, var(--theme-info) 18%);
+}
+
+html[data-theme-mode] .entry-source-chip.manual-created,
+html[data-theme-mode] .world-engine-event-source.manual,
+html[data-theme-mode] .origin-badge {
+  color: var(--theme-muted);
+  border-color: color-mix(in srgb, var(--theme-muted) 42%, var(--theme-secondary));
+  background: color-mix(in srgb, var(--theme-secondary) 88%, var(--theme-font) 12%);
+}
+
+html[data-theme-mode] .entry-review-chip.review-pending,
+html[data-theme-mode] .world-engine-event-review.pending {
+  color: var(--theme-warning);
+  border-color: color-mix(in srgb, var(--theme-warning) 54%, var(--theme-secondary));
+  background: color-mix(in srgb, var(--theme-secondary) 76%, var(--theme-warning) 24%);
+}
+
+html[data-theme-mode] .entry-review-chip.review-complete,
+html[data-theme-mode] .world-engine-event-review.complete {
+  color: var(--theme-success);
+  border-color: color-mix(in srgb, var(--theme-success) 52%, var(--theme-secondary));
+  background: color-mix(in srgb, var(--theme-secondary) 82%, var(--theme-success) 18%);
+}
+
+/* Success feedback and execution states. */
+html[data-theme-mode] .form-success,
+html[data-theme-mode] .editor-menu-feedback:not(.error),
+html[data-theme-mode] .agent-task-done .agent-task-icon {
+  color: var(--theme-success);
+}
+
+html[data-theme-mode] .save-status:not(.error) {
+  color: var(--theme-button);
+}
+
+html[data-theme-mode] .agent-task-running .agent-task-icon,
+html[data-theme-mode] .agent-task-running strong {
+  color: var(--theme-info);
+}
+
+/* Errors, deletion actions, and failed execution states. */
+html[data-theme-mode] .save-status.error,
+html[data-theme-mode] .paragraph-ai-error,
+html[data-theme-mode] .generation-error,
+html[data-theme-mode] .settings-error,
+html[data-theme-mode] .editor-menu-feedback.error,
+html[data-theme-mode] .crop-error,
+html[data-theme-mode] .upload-error,
+html[data-theme-mode] .agent-task-error .agent-task-icon,
+html[data-theme-mode] .danger,
+html[data-theme-mode] .icon-button.danger,
+html[data-theme-mode] .editor-menu-action.danger,
+html[data-theme-mode] .danger-action {
+  color: var(--theme-danger);
+}
+
+html[data-theme-mode] .button.danger.subtle {
+  color: var(--theme-danger);
+  border-color: color-mix(in srgb, var(--theme-danger) 50%, var(--theme-secondary));
+  background: color-mix(in srgb, var(--theme-secondary) 88%, var(--theme-danger) 12%);
+}
+
+html[data-theme-mode] .button.danger-button {
+  color: var(--theme-danger-text);
+  border-color: var(--theme-danger);
+  background: var(--theme-danger);
+}
+
+html[data-theme-mode] .button.danger-button:hover,
+html[data-theme-mode] .button.danger.subtle:hover,
+html[data-theme-mode] .editor-menu-action.danger:hover,
+html[data-theme-mode] .icon-button.danger:hover:not(:disabled),
+html[data-theme-mode] .danger-action:hover {
+  color: var(--theme-danger-text);
+  border-color: var(--theme-danger);
+  background: color-mix(in srgb, var(--theme-danger) 82%, var(--theme-secondary) 18%);
+}
+
+/* Warnings remain separate from destructive/error feedback. */
+html[data-theme-mode] .warning-note,
+html[data-theme-mode] .storage-warning {
+  color: var(--theme-warning);
+  border-color: color-mix(in srgb, var(--theme-warning) 52%, var(--theme-secondary));
+  background: color-mix(in srgb, var(--theme-secondary) 84%, var(--theme-warning) 16%);
+}
+
+html[data-theme-mode] .warning-note {
+  border-left-color: var(--theme-warning);
+}
+
+html[data-theme-mode] .warning-note svg,
+html[data-theme-mode] .storage-warning-action {
+  color: var(--theme-warning);
+}
+
+html[data-theme-mode] .storage-warning-action {
+  border-color: color-mix(in srgb, var(--theme-warning) 52%, var(--theme-secondary));
+  background: color-mix(in srgb, var(--theme-secondary) 90%, var(--theme-warning) 10%);
+}
+
+html[data-theme-mode] .storage-warning-action:hover {
+  color: var(--theme-font);
+  border-color: var(--theme-warning);
+  background: color-mix(in srgb, var(--theme-secondary) 78%, var(--theme-warning) 22%);
+}
