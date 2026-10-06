@@ -2,6 +2,11 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { computed, ref } from 'vue'
 import { createAgentOperations } from '../src/agent/operations.ts'
+import { agentResourceTemplateFields } from '../src/agent/resourceFieldPolicy.ts'
+
+const completeFields = (resourceType, values = {}) => Object.fromEntries(
+  agentResourceTemplateFields[resourceType].map((field) => [field, values[field] ?? '']),
+)
 
 function createStore() {
   return {
@@ -168,7 +173,13 @@ test('agent-created resources are marked with their creation source', () => {
     return created
   })
 
-  operations.applyAgentOperation({ action: 'create_resource', resourceType: 'item', title: '铜钥匙' })
+  operations.applyAgentOperation({
+    action: 'create_resource',
+    resourceType: 'item',
+    title: '铜钥匙',
+    includeAllFields: true,
+    fields: completeFields('item'),
+  })
   assert.equal(created.creationSource, 'agent')
 })
 
@@ -187,6 +198,7 @@ test('normalizes English world-book fields and always strategy during creation',
     action: 'create_resource',
     resourceType: 'world',
     title: '天玄宗',
+    includeAllFields: true,
     fields: {
       triggerStrategy: 'always',
       triggerKeys: '天玄宗, 宗门',
@@ -231,6 +243,165 @@ test('normalizes English fields during updates and keeps trigger aliases out of 
   assert.equal(world.fields['内容'], '新的设定。')
   assert.equal(world.fields.triggerStrategy, undefined)
   assert.equal(world.retrieval?.triggerStrategy, 'always')
+})
+
+test('applies explicit empty strings when updating summaries and fields, while rejecting empty titles', () => {
+  const storeState = createStore()
+  const world = {
+    id: 'world-clear',
+    title: '旧世界',
+    tag: '',
+    summary: '旧摘要',
+    fields: {
+      触发策略: '关键词',
+      触发键: '旧世界、旧词',
+      内容: '旧内容',
+      适用范围: '全书',
+      状态: '稳定',
+    },
+  }
+  storeState.world.push(world)
+  const { operations } = createOperations(storeState)
+
+  operations.applyAgentOperation({
+    action: 'update_resource',
+    resourceType: 'world',
+    target: world.id,
+    summary: '',
+    fields: {
+      triggerKeys: '',
+      content: '',
+      scope: '',
+      status: '',
+    },
+  })
+
+  assert.equal(world.title, '旧世界')
+  assert.equal(world.summary, '')
+  assert.equal(world.fields['触发键'], '')
+  assert.equal(world.fields['内容'], '')
+  assert.equal(world.fields['适用范围'], '')
+  assert.equal(world.fields['状态'], '')
+  assert.deepEqual(world.retrieval?.keys, [])
+  assert.match(operations.describeAgentOperation({
+    action: 'update_resource',
+    resourceType: 'world',
+    target: world.id,
+    summary: '',
+    fields: { content: '' },
+  }), /摘要：清空/)
+  assert.match(operations.describeAgentOperation({
+    action: 'update_resource',
+    resourceType: 'world',
+    target: world.id,
+    fields: { 内容: '' },
+  }), /内容：清空/)
+  assert.throws(() => operations.applyAgentOperation({
+    action: 'update_resource',
+    resourceType: 'world',
+    target: world.id,
+    title: '',
+  }), /名称不能为空/)
+  assert.equal(world.title, '旧世界')
+})
+
+test('explicit empty updates still respect summary and field locks', () => {
+  const storeState = createStore()
+  const character = {
+    id: 'char-clear-locked',
+    title: '锁定角色',
+    tag: '配角',
+    summary: '原摘要',
+    fields: { 角色身份: '配角', 性格: '谨慎' },
+    lockedFields: ['summary', '性格'],
+  }
+  storeState.characters.push(character)
+  const { operations } = createOperations(storeState)
+
+  const result = operations.applyAgentOperation({
+    action: 'update_resource',
+    resourceType: 'character',
+    target: character.id,
+    summary: '',
+    fields: { 性格: '' },
+  })
+
+  assert.match(result, /跳过锁定内容/)
+  assert.equal(character.summary, '原摘要')
+  assert.equal(character.fields['性格'], '谨慎')
+})
+
+test('builds field-level before/after review with canonical trigger values and clear status', () => {
+  const storeState = createStore()
+  const world = {
+    id: 'world-review',
+    title: '旧世界',
+    tag: '草稿',
+    summary: '旧摘要',
+    fields: { '触发策略': '关键词', '触发键': '旧词', '内容': '旧内容', '状态': '稳定' },
+  }
+  storeState.world.push(world)
+  const { operations } = createOperations(storeState)
+  const review = operations.describeAgentOperationReview({
+    action: 'update_resource',
+    resourceType: 'world',
+    target: world.id,
+    summary: '',
+    fields: { '触发策略': 'always', '触发键': '新词、 新词', '内容': '' },
+  }, 0)
+  assert.equal(review.kind, 'update')
+  assert.equal(review.target, world.id)
+  const diff = Object.fromEntries(review.diffs.map((item) => [item.field, item]))
+  assert.equal(diff['摘要/角色信息'].status, 'cleared')
+  assert.equal(diff['摘要/角色信息'].before, '旧摘要')
+  assert.equal(diff['摘要/角色信息'].after, '')
+  assert.equal(diff['触发策略'].after, '常驻')
+  assert.equal(diff['触发键'].after, '新词')
+  assert.equal(diff['内容'].status, 'cleared')
+})
+
+test('field-level review marks locked fields without hiding the requested after value', () => {
+  const storeState = createStore()
+  const character = {
+    id: 'char-review-lock',
+    title: '锁定角色',
+    tag: '配角',
+    summary: '摘要',
+    fields: { 角色身份: '配角', 性格: '谨慎' },
+    lockedAll: false,
+    lockedFields: ['性格'],
+  }
+  storeState.characters.push(character)
+  const { operations } = createOperations(storeState)
+  const review = operations.describeAgentOperationReview({
+    action: 'update_resource',
+    resourceType: 'character',
+    target: character.id,
+    fields: { 性格: '冲动' },
+  })
+  assert.equal(review.diffs.length, 1)
+  assert.deepEqual(review.diffs[0], {
+    field: '性格',
+    before: '谨慎',
+    after: '冲动',
+    status: 'locked',
+    locked: true,
+  })
+})
+
+test('plan review can carry the explicit portfolio and project target path', () => {
+  const { operations } = createOperations()
+  const review = operations.describeAgentOperationReview({
+    action: 'update_resource',
+    resourceType: 'character',
+    target: 'char-shen',
+    fields: { 性格: '谨慎' },
+  }, 0, { portfolioId: 'portfolio-a', projectId: 'project-a' })
+  assert.deepEqual(review.targetPath, {
+    portfolioId: 'portfolio-a',
+    projectId: 'project-a',
+    collection: 'characters',
+  })
 })
 
 test('world engine events follow the same whole-item and review-status lock rules', () => {
@@ -279,4 +450,30 @@ test('world engine events follow the same whole-item and review-status lock rule
     summary: '不应写入',
   }), /整体锁定/)
   assert.equal(event.summary, '新事件')
+})
+
+test('world engine event summaries can be explicitly cleared', () => {
+  const storeState = createStore()
+  const event = {
+    id: 'event-clear',
+    kind: 'event',
+    title: '待清空事件',
+    summary: '旧事件',
+    status: 'planned',
+    actorIds: [],
+    consequences: [],
+    evidence: [],
+    updatedAt: 1,
+  }
+  storeState.worldEngine = { events: [event], updatedAt: 1 }
+  const { operations } = createOperations(storeState)
+
+  operations.applyAgentOperation({
+    action: 'update_resource',
+    resourceType: 'world_event',
+    target: event.id,
+    summary: '',
+  })
+
+  assert.equal(event.summary, '')
 })

@@ -10,7 +10,12 @@ import type {
   CustomModuleFieldValue,
   CustomModuleSchema,
 } from '../types'
-import { normalizeAgentResourceFields, unknownAgentResourceFields } from './resourceFieldPolicy.ts'
+import {
+  missingAgentResourceTemplateFields,
+  normalizeAgentResourceFields,
+  strictStandardResourceTypes,
+  unknownAgentResourceFields,
+} from './resourceFieldPolicy.ts'
 
 type ValidationResult =
   | { ok: true; value: AgentResponse }
@@ -44,8 +49,8 @@ const customModuleFieldTypes: CustomModuleFieldType[] = [
 
 const operationProperties: Record<AgentOperation['action'], string[]> = {
   search_web_memes: ['action', 'engine', 'query', 'limit'],
-  create_resource: ['action', 'resourceType', 'title', 'summary', 'fields', 'includeAllFields', 'holdingItems', 'holdingSkills', 'groupTarget'],
-  update_resource: ['action', 'resourceType', 'target', 'title', 'summary', 'fields', 'holdingItems', 'holdingSkills', 'reviewStatus'],
+  create_resource: ['action', 'resourceType', 'title', 'summary', 'fields', 'includeAllFields', 'holdingItems', 'holdingSkills', 'groupTarget', 'outlineType', 'outlineParentId', 'outlineStartChapterId', 'outlineEndChapterId', 'outlineCollapsed'],
+  update_resource: ['action', 'resourceType', 'target', 'title', 'summary', 'fields', 'holdingItems', 'holdingSkills', 'reviewStatus', 'outlineType', 'outlineParentId', 'outlineStartChapterId', 'outlineEndChapterId', 'outlineCollapsed'],
   create_resource_group: ['action', 'collection', 'title'],
   delete_resource_group: ['action', 'collection', 'target'],
   move_resource_to_group: ['action', 'collection', 'target', 'groupTarget'],
@@ -352,6 +357,14 @@ function validateOperation(
     const error = validateOptionalString(value, key, path)
     if (error) return error
   }
+  if (
+    action === 'update_resource'
+    && Object.prototype.hasOwnProperty.call(value, 'title')
+    && typeof value.title === 'string'
+    && !value.title.trim()
+  ) {
+    return `${path}.title 必须是非空字符串；如需清空摘要或字段，请提交空字符串到 summary 或 fields 对应字段`
+  }
 
   if (value.fields !== undefined && !isStringRecord(value.fields)) {
     return `${path}.fields 必须是字符串到字符串的对象`
@@ -362,6 +375,24 @@ function validateOperation(
   const normalizedFields = value.fields === undefined
     ? undefined
     : normalizeAgentResourceFields(value.resourceType as AgentResourceType, value.fields)
+  if (action === 'create_resource'
+    && strictStandardResourceTypes.includes(value.resourceType as (typeof strictStandardResourceTypes)[number])) {
+    if (value.includeAllFields !== true) {
+      return `${path}.includeAllFields 必须为 true；创建${value.resourceType === 'world' ? '世界书条目' : '标准卡'}时必须返回完整模板，不能只返回摘要`
+    }
+    const missingTemplateFields = missingAgentResourceTemplateFields(value.resourceType as AgentResourceType, normalizedFields)
+    if (missingTemplateFields.length) {
+      return `${path}.fields 缺少标准模板字段：${missingTemplateFields.join('、')}。没有内容的字段也必须填写空字符串`
+    }
+  }
+  if (action === 'update_resource'
+    && strictStandardResourceTypes.includes(value.resourceType as (typeof strictStandardResourceTypes)[number])
+    && normalizedFields !== undefined) {
+    const unknownFields = unknownAgentResourceFields(value.resourceType as AgentResourceType, normalizedFields)
+    if (unknownFields.length) {
+      return `${path}.fields 包含标准${value.resourceType === 'world' ? '世界书' : '卡片'}不支持的字段：${unknownFields.join('、')}。标准卡更新不能借用旧条目的未知字段；如需独立字段结构，请使用自定义模块。`
+    }
+  }
   if (action === 'create_resource' && normalizedFields !== undefined) {
     const unknownFields = unknownAgentResourceFields(value.resourceType as AgentResourceType, normalizedFields)
     if (unknownFields.length) {

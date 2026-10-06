@@ -1,0 +1,22 @@
+.mcp-connection-indicator {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  color: var(--theme-font);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+.mcp-connection-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--theme-danger);
+}
+.mcp-connection-indicator.connected .mcp-connection-dot {
+  background: var(--theme-success);
+}

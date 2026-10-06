@@ -1,4 +1,6 @@
 import type { Resource, ResourceTriggerStrategy, Store } from '../types'
+import { formatAgentDataBlock } from '../agent/dataBoundary.ts'
+import { estimateTextTokens } from '../api/contextBudget.ts'
 
 
 /** The collection names that can participate in context retrieval. */
@@ -17,13 +19,57 @@ export type RetrievalMatch = RetrievalSource & {
   matchedKeys: string[]
   /** `direct` means a key was found in the query; `recursive` means it was found in another entry. */
   matchType: 'direct' | 'recursive'
+  /** Local estimate for the formatted DATA block, populated after budget selection. */
+  estimatedTokens?: number
+}
+
+export type RetrievalSkipReason = 'disabled' | 'max-results' | 'max-tokens'
+
+export type RetrievalSkip = RetrievalMatch & {
+  reason: RetrievalSkipReason
+  estimatedTokens: number
+}
+
+export type RetrievalReport = {
+  matches: RetrievalMatch[]
+  skipped: RetrievalSkip[]
+  estimatedTokens: number
+  maxResults: number
+  maxTokens: number
+}
+
+/**
+ * Compact index entry for callers that already send the full formatted
+ * resource data block. Keeping this projection separate from
+ * `formatRetrievedContext` prevents the same fields from being serialized
+ * twice in an Agent request while preserving the metadata needed to identify
+ * and protect a resource.
+ */
+export type RetrievalIndexEntry = {
+  collection: RetrievalCollection
+  id: string
+  title: string
+  summary?: string
+  depth: number
+  matchedKeys: string[]
+  matchType: RetrievalMatch['matchType']
+  estimatedTokens?: number
+  injectionOrder?: number
+  lockedAll?: boolean
+  lockedFields?: string[]
+  holdingItems?: string[]
+  holdingSkills?: string[]
+  reviewStatus?: Resource['reviewStatus']
+  reviewStatusLocked?: boolean
 }
 
 export type RetrievalOptions = {
   /** Maximum number of recursive hops after direct matches. Defaults to 2. */
   maxDepth?: number
-  /** Result budget; enabled constant entries are retained even when they exceed it. */
+  /** Total result count budget, including constant entries. */
   maxResults?: number
+  /** Total estimated prompt-token budget for retrieved entries. */
+  maxTokens?: number
   /** Include entries explicitly disabled in their fields. Defaults to false. */
   includeDisabled?: boolean
 }
@@ -161,8 +207,15 @@ function sourceOrder(source: RetrievalSource): number {
 }
 
 function isEnabled(source: RetrievalSource): boolean {
+  if (source.resource.enabled === false) return false
   if (source.resource.retrieval?.enabled === false) return false
   return boolField(source.resource, ['启用', '启用检索', '允许注入'], true)
+}
+
+function matchKeys(source: RetrievalSource, normalizedQuery: string): string[] {
+  return isAlwaysTriggered(source.resource)
+    ? ['常驻']
+    : keysFor(source.resource, source.collection).filter((key) => normalizedQuery.includes(key))
 }
 
 function canStartRecursion(resource: Resource): boolean {
@@ -188,11 +241,44 @@ export function retrieveContext(
   query: string,
   options: RetrievalOptions = {},
 ): RetrievalMatch[] {
+  return retrieveContextReport(sources, query, options).matches
+}
+
+/**
+ * Retrieve context together with the entries that were eligible but omitted
+ * by an enable switch or a result/token budget. The report is intentionally a
+ * separate API so existing callers can continue to consume a plain match list.
+ */
+export function retrieveContextReport(
+  sources: RetrievalSource[],
+  query: string,
+  options: RetrievalOptions = {},
+): RetrievalReport {
   const maxDepth = Math.max(0, Math.floor(options.maxDepth ?? 2))
   const maxResults = options.maxResults === undefined ? Number.POSITIVE_INFINITY : Math.max(0, Math.floor(options.maxResults))
+  const maxTokens = options.maxTokens === undefined
+    ? Number.POSITIVE_INFINITY
+    : Number.isFinite(options.maxTokens)
+      ? Math.max(0, Math.floor(options.maxTokens))
+      : Number.POSITIVE_INFINITY
   const includeDisabled = options.includeDisabled ?? false
   const normalizedQuery = normalize(query)
-  if (maxResults === 0) return []
+  if (maxResults === 0 || maxTokens === 0) {
+    const skipped: RetrievalSkip[] = []
+    for (const source of sources) {
+      const matchedKeys = matchKeys(source, normalizedQuery)
+      if (!matchedKeys.length) continue
+      skipped.push({
+        ...source,
+        depth: 0,
+        matchedKeys,
+        matchType: 'direct',
+        reason: maxResults === 0 ? 'max-results' : 'max-tokens',
+        estimatedTokens: estimateRetrievedMatchTokens({ ...source, depth: 0, matchedKeys, matchType: 'direct' }),
+      })
+    }
+    return { matches: [], skipped, estimatedTokens: 0, maxResults, maxTokens }
+  }
 
   const usable = sources.filter((source) => includeDisabled || isEnabled(source))
   // IDs are only unique inside a collection. Imported/manual data can legally
@@ -202,9 +288,7 @@ export function retrieveContext(
   const queue: Array<{ source: RetrievalSource; depth: number; haystack: string; matchType: 'direct' | 'recursive' }> = []
 
   for (const source of usable) {
-    const matchedKeys = isAlwaysTriggered(source.resource)
-      ? ['常驻']
-      : keysFor(source.resource, source.collection).filter((key) => normalizedQuery.includes(key))
+    const matchedKeys = matchKeys(source, normalizedQuery)
     if (!matchedKeys.length) continue
     matches.set(`${source.collection}:${source.resource.id}`, { ...source, depth: 0, matchedKeys, matchType: 'direct' })
     queue.push({ source, depth: 0, haystack: searchableText(source.resource), matchType: 'direct' })
@@ -240,33 +324,109 @@ export function retrieveContext(
 
   const ordered = [...matches.values()]
     .sort((left, right) => sourceOrder(left) - sourceOrder(right) || left.depth - right.depth || left.sourceIndex - right.sourceIndex)
-  const constantCount = ordered.filter((match) => isAlwaysTriggered(match.resource)).length
-  let keywordBudget = Math.max(0, maxResults - constantCount)
-  return ordered.filter((match) => {
-    if (isAlwaysTriggered(match.resource)) return true
-    if (keywordBudget <= 0) return false
-    keywordBudget -= 1
-    return true
-  })
+  const skipped: RetrievalSkip[] = []
+  // Disabled entries are reported only when they would have matched directly.
+  // They never enter the recursion queue, preserving the previous safety
+  // behavior while making the omission visible to the context preview.
+  if (!includeDisabled) {
+    for (const source of sources) {
+      if (isEnabled(source)) continue
+      const matchedKeys = matchKeys(source, normalizedQuery)
+      if (!matchedKeys.length) continue
+      skipped.push({
+        ...source,
+        depth: 0,
+        matchedKeys,
+        matchType: 'direct',
+        reason: 'disabled',
+        estimatedTokens: estimateRetrievedMatchTokens({ ...source, depth: 0, matchedKeys, matchType: 'direct' }),
+      })
+    }
+  }
+  const selected: RetrievalMatch[] = []
+  let estimatedTokens = 0
+  for (const match of ordered) {
+    const matchTokens = estimateRetrievedMatchTokens(match)
+    if (selected.length >= maxResults) {
+      skipped.push({ ...match, reason: 'max-results', estimatedTokens: matchTokens })
+      continue
+    }
+    if (estimatedTokens + matchTokens > maxTokens) {
+      skipped.push({ ...match, reason: 'max-tokens', estimatedTokens: matchTokens })
+      continue
+    }
+    selected.push({ ...match, estimatedTokens: matchTokens })
+    estimatedTokens += matchTokens
+  }
+  return { matches: selected, skipped, estimatedTokens, maxResults, maxTokens }
 }
 
 /** Build sources from a Store while preserving the Store's collection order. */
 export function retrieveStoreContext(store: Pick<Store, RetrievalCollection>, query: string, options?: RetrievalOptions): RetrievalMatch[] {
+  return retrieveStoreContextReport(store, query, options).matches
+}
+
+export function retrieveStoreContextReport(
+  store: Pick<Store, RetrievalCollection>,
+  query: string,
+  options?: RetrievalOptions,
+): RetrievalReport {
   const sources: RetrievalSource[] = []
   for (const collection of collections) {
     const resources = store[collection] ?? []
     resources.forEach((resource, sourceIndex) => sources.push({ collection, resource, sourceIndex }))
   }
-  return retrieveContext(sources, query, options)
+  return retrieveContextReport(sources, query, options)
+}
+
+function retrievedMatchText(match: RetrievalMatch): string {
+  const fields = Object.entries(match.resource.fields)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join('\n')
+  return `[${match.collection}] ${match.resource.title} (depth=${match.depth}, order=${sourceOrder(match)})\n${match.resource.summary}${fields ? `\n${fields}` : ''}`
+}
+
+function estimateRetrievedMatchTokens(match: RetrievalMatch): number {
+  return estimateTextTokens(formatAgentDataBlock(`resource:${match.collection}:${match.resource.id}`, retrievedMatchText(match)))
 }
 
 /** Compact prompt-ready representation used by Agent and正文生成 callers. */
-/** Compact prompt-ready representation used by Agent and正文生成 callers. */
 export function formatRetrievedContext(matches: RetrievalMatch[]): string {
+  return matches.map((match) => formatAgentDataBlock(
+    `resource:${match.collection}:${match.resource.id}`,
+    retrievedMatchText(match),
+  )).join('\n\n')
+}
+
+/**
+ * Return the structured retrieval index without duplicating resource fields.
+ *
+ * The full prose/field payload remains in the DATA block produced by
+ * `formatRetrievedContext`; this index is intentionally limited to identity,
+ * match provenance and mutation-protection metadata.
+ */
+export function buildRetrievalIndex(matches: readonly RetrievalMatch[]): RetrievalIndexEntry[] {
   return matches.map((match) => {
-    const fields = Object.entries(match.resource.fields)
-      .map(([key, value]) => `${key}: ${value}`)
-      .join('\n')
-    return `[${match.collection}] ${match.resource.title} (depth=${match.depth}, order=${sourceOrder(match)})\n${match.resource.summary}${fields ? `\n${fields}` : ''}`
-  }).join('\n\n')
+    const resource = match.resource
+    const index: RetrievalIndexEntry = {
+      collection: match.collection,
+      id: resource.id,
+      title: resource.title,
+      depth: match.depth,
+      matchedKeys: [...match.matchedKeys],
+      matchType: match.matchType,
+      ...(match.estimatedTokens !== undefined ? { estimatedTokens: match.estimatedTokens } : {}),
+    }
+    const summary = resource.summary.trim()
+    if (summary) index.summary = summary.slice(0, 240)
+    const injectionOrder = resource.retrieval?.injectionOrder ?? resource.injectionOrder
+    if (typeof injectionOrder === 'number' && Number.isFinite(injectionOrder)) index.injectionOrder = injectionOrder
+    if (resource.lockedAll === true) index.lockedAll = true
+    if (resource.lockedFields?.length) index.lockedFields = [...resource.lockedFields]
+    if (resource.holdingItems?.length) index.holdingItems = [...resource.holdingItems]
+    if (resource.holdingSkills?.length) index.holdingSkills = [...resource.holdingSkills]
+    if (resource.reviewStatus) index.reviewStatus = resource.reviewStatus
+    if (resource.reviewStatusLocked === true) index.reviewStatusLocked = true
+    return index
+  })
 }

@@ -1,4 +1,5 @@
 import type { Resource } from '../types.ts'
+import { normalizeProviderProtocol, providerSupportsParameter } from './providerCapabilities.ts'
 
 export const defaultModelSettings = {
   contextTokens: 272000,
@@ -43,7 +44,8 @@ function readNumber(fields: Record<string, string>, key: keyof typeof settingsFi
 /** Empty sampling fields deliberately use the provider's own defaults. */
 export function readModelSettings(provider: Pick<Resource, 'fields'>): ModelSettings {
   const fields = provider.fields ?? {}
-  const isAnthropic = fields['协议'] === 'Anthropic'
+  const protocol = normalizeProviderProtocol(fields['协议'])
+  const isAnthropic = protocol === 'Anthropic'
   const outputTokenParameter = fields['输出长度参数']?.trim()
   if (outputTokenParameter && !['max_tokens', 'max_completion_tokens'].includes(outputTokenParameter)) {
     throw new Error('输出长度参数必须为 max_tokens 或 max_completion_tokens。')
@@ -52,16 +54,21 @@ export function readModelSettings(provider: Pick<Resource, 'fields'>): ModelSett
     contextTokens: readNumber(fields, 'contextTokens', 1024, 10000000, defaultModelSettings.contextTokens, true)!,
     maxTokens: readNumber(fields, 'maxTokens', 1, 1000000, defaultModelSettings.maxTokens, true)!,
     historyTokens: readNumber(fields, 'historyTokens', 0, 10000000, defaultModelSettings.historyTokens, true)!,
-    includeUsage: fields['流式用量统计'] !== 'false',
-    outputTokenParameter: outputTokenParameter === 'max_completion_tokens' ? 'max_completion_tokens' : 'max_tokens',
+    includeUsage: providerSupportsParameter(protocol, 'includeUsage') && fields['流式用量统计'] !== 'false',
+    // Native providers choose their own output field. Keep the stable
+    // ModelSettings shape for callers, while the request client omits this
+    // client-only selector for those protocols.
+    outputTokenParameter: providerSupportsParameter(protocol, 'outputTokenParameter') && outputTokenParameter === 'max_completion_tokens'
+      ? 'max_completion_tokens'
+      : 'max_tokens',
   }
   const optional = {
     temperature: readNumber(fields, 'temperature', 0, isAnthropic ? 1 : 2),
     topP: readNumber(fields, 'topP', 0, 1),
     // Keep saved values when switching protocols, but never send unsupported
     // penalties to Anthropic. Switching back restores the author's settings.
-    frequencyPenalty: isAnthropic ? undefined : readNumber(fields, 'frequencyPenalty', -2, 2),
-    presencePenalty: isAnthropic ? undefined : readNumber(fields, 'presencePenalty', -2, 2),
+    frequencyPenalty: providerSupportsParameter(protocol, 'frequencyPenalty') ? readNumber(fields, 'frequencyPenalty', -2, 2) : undefined,
+    presencePenalty: providerSupportsParameter(protocol, 'presencePenalty') ? readNumber(fields, 'presencePenalty', -2, 2) : undefined,
   }
   for (const [key, value] of Object.entries(optional)) {
     if (value !== undefined) Object.assign(settings, { [key]: value })

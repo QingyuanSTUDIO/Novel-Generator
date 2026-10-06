@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { ChevronDown, Download, Info, LoaderCircle, RotateCcw, SlidersHorizontal } from 'lucide-vue-next'
 import { defaultModelSettings, readModelSettings } from '../api/modelSettings'
+import { getProviderCapabilities, providerParameterStatus } from '../api/providerCapabilities'
 
 const props = defineProps<{
   fields: Record<string, string>
@@ -15,8 +16,10 @@ const emit = defineEmits<{
 }>()
 
 const protocol = computed(() => props.fields['协议'] || 'OpenAI Compatible')
-const isAnthropic = computed(() => protocol.value === 'Anthropic')
-const isOpenAICompatible = computed(() => ['OpenAI Compatible', '自定义 HTTP'].includes(protocol.value))
+const capabilities = computed(() => getProviderCapabilities(protocol.value))
+const isAnthropic = computed(() => capabilities.value.protocol === 'Anthropic')
+const isOpenAICompatible = computed(() => providerParameterStatus(protocol.value, 'outputTokenParameter') === 'supported')
+const usageCapability = computed(() => capabilities.value.parameters.includeUsage)
 
 const tokenFields = [
   { key: '上下文长度', fallback: defaultModelSettings.contextTokens, min: 1024, max: 10000000, hint: '模型能接收的输入与输出总量' },
@@ -25,10 +28,10 @@ const tokenFields = [
 ] as const
 
 const samplingFields = computed(() => [
-  { key: '温度', min: 0, max: isAnthropic.value ? 1 : 2, step: 0.01, initial: 0.7, hint: '较低更稳定，较高更发散', unsupported: false },
-  { key: 'Top P', min: 0, max: 1, step: 0.01, initial: 0.9, hint: '限制采样候选范围，可只调整温度', unsupported: false },
-  { key: '频率惩罚', min: -2, max: 2, step: 0.01, initial: 0, hint: '正值降低反复使用相同词语的倾向', unsupported: isAnthropic.value },
-  { key: '存在惩罚', min: -2, max: 2, step: 0.01, initial: 0, hint: '正值鼓励使用尚未出现的内容', unsupported: isAnthropic.value },
+  { key: '温度', capability: 'temperature' as const, min: 0, max: isAnthropic.value ? 1 : 2, step: 0.01, initial: 0.7, hint: '较低更稳定，较高更发散' },
+  { key: 'Top P', capability: 'topP' as const, min: 0, max: 1, step: 0.01, initial: 0.9, hint: '限制采样候选范围，可只调整温度' },
+  { key: '频率惩罚', capability: 'frequencyPenalty' as const, min: -2, max: 2, step: 0.01, initial: 0, hint: '正值降低反复使用相同词语的倾向' },
+  { key: '存在惩罚', capability: 'presencePenalty' as const, min: -2, max: 2, step: 0.01, initial: 0, hint: '正值鼓励使用尚未出现的内容' },
 ])
 
 function isCustom(key: string) {
@@ -37,6 +40,10 @@ function isCustom(key: string) {
 
 function setCustom(key: string, enabled: boolean, initial: number) {
   emit('updateField', key, enabled ? String(initial) : '')
+}
+
+function fieldCapability(key: typeof samplingFields.value[number]['capability']) {
+  return capabilities.value.parameters[key]
 }
 
 function resetSampling() {
@@ -70,6 +77,10 @@ const settingsError = computed(() => {
     </div>
     <p v-if="props.modelLimitsError" class="generation-model-limits-result generation-model-limits-error" role="alert">{{ props.modelLimitsError }}</p>
     <p v-else-if="props.modelLimitsMessage" class="generation-model-limits-result" role="status">{{ props.modelLimitsMessage }}</p>
+    <div class="generation-capability-note" role="status">
+      <strong>{{ capabilities.protocol }} 参数能力</strong>
+      <span>{{ capabilities.summary }}</span>
+    </div>
     <div class="generation-token-grid">
       <label v-for="field in tokenFields" :key="field.key" class="form-field generation-token-field">
         <span>{{ field.key }} <small>Token</small></span>
@@ -95,12 +106,12 @@ const settingsError = computed(() => {
       <div class="generation-sampling-body">
         <div class="generation-sampling-toolbar"><p>参数只在启用自定义且填写数值时发送。</p><button type="button" @click="resetSampling"><RotateCcw :size="12" />全部使用默认</button></div>
         <div class="generation-sampling-grid">
-          <div v-for="field in samplingFields" :key="field.key" :class="['generation-sampling-field', { unsupported: field.unsupported }]">
+          <div v-for="field in samplingFields" :key="field.key" :class="['generation-sampling-field', { unsupported: fieldCapability(field.capability).status === 'unsupported' }]">
             <div class="generation-sampling-label">
               <strong>{{ field.key }}</strong>
-              <label :title="field.unsupported ? 'Anthropic 不支持此参数' : '关闭后使用模型默认值'">
-                <input type="checkbox" :checked="!field.unsupported && isCustom(field.key)" :disabled="field.unsupported" @change="setCustom(field.key, ($event.target as HTMLInputElement).checked, field.initial)" />
-                <span>{{ field.unsupported ? '不支持' : '自定义' }}</span>
+              <label :title="fieldCapability(field.capability).status === 'unsupported' ? fieldCapability(field.capability).description : '关闭后使用模型默认值'">
+                <input type="checkbox" :checked="fieldCapability(field.capability).status !== 'unsupported' && isCustom(field.key)" :disabled="fieldCapability(field.capability).status === 'unsupported'" @change="setCustom(field.key, ($event.target as HTMLInputElement).checked, field.initial)" />
+                <span>{{ fieldCapability(field.capability).status === 'unsupported' ? '不支持' : '自定义' }}</span>
               </label>
             </div>
             <div class="generation-sampling-controls">
@@ -110,7 +121,7 @@ const settingsError = computed(() => {
                 :max="field.max"
                 :step="field.step"
                 :value="isCustom(field.key) ? props.fields[field.key] : field.initial"
-                :disabled="field.unsupported || !isCustom(field.key)"
+                :disabled="fieldCapability(field.capability).status === 'unsupported' || !isCustom(field.key)"
                 :aria-label="`${field.key}滑块`"
                 @input="emit('updateField', field.key, ($event.target as HTMLInputElement).value)"
               />
@@ -119,14 +130,14 @@ const settingsError = computed(() => {
                 :min="field.min"
                 :max="field.max"
                 :step="field.step"
-                :value="field.unsupported ? '' : (props.fields[field.key] ?? '')"
-                :disabled="field.unsupported"
+                :value="fieldCapability(field.capability).status === 'unsupported' ? '' : (props.fields[field.key] ?? '')"
+                :disabled="fieldCapability(field.capability).status === 'unsupported'"
                 placeholder="默认"
                 :aria-label="field.key"
                 @input="emit('updateField', field.key, ($event.target as HTMLInputElement).value)"
               />
             </div>
-            <small>{{ field.unsupported ? 'Anthropic 不支持频率惩罚和存在惩罚，不会发送。' : field.hint }}</small>
+            <small>{{ fieldCapability(field.capability).status === 'unsupported' ? fieldCapability(field.capability).description + '不会发送。' : field.hint }}</small>
           </div>
         </div>
       </div>
@@ -142,11 +153,12 @@ const settingsError = computed(() => {
     </label>
 
     <div class="generation-usage-option">
-      <div><strong>流式用量统计</strong><p>向支持的接口请求 Token 用量；接口未返回时显示未知。</p></div>
-      <label class="switch-label">
+      <div><strong>流式用量统计</strong><p>{{ usageCapability.status === 'supported' ? '向支持的接口请求 Token 用量；接口未返回时显示未知。' : usageCapability.description }}</p></div>
+      <label v-if="usageCapability.status === 'supported'" class="switch-label">
         <input type="checkbox" :checked="props.fields['流式用量统计'] !== 'false'" :disabled="props.fields['流式输出'] === 'false'" @change="emit('updateField', '流式用量统计', ($event.target as HTMLInputElement).checked ? 'true' : 'false')" />
         <span>请求统计</span>
       </label>
+      <span v-else class="generation-capability-badge">{{ usageCapability.status === 'automatic' ? '协议自动返回' : '不支持' }}</span>
     </div>
     <p v-if="props.fields['流式输出'] === 'false'" class="generation-helper">开启流式输出后可请求流式用量统计。此设置不控制模型服务的缓存。</p>
   </section>
@@ -163,6 +175,9 @@ const settingsError = computed(() => {
 .generation-limits-fetch:disabled { opacity: .65; cursor: default; }
 .generation-model-limits-result { margin: 10px 0 0; color: var(--theme-muted); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
 .generation-model-limits-error { color: var(--theme-danger); }
+.generation-capability-note { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; margin-top: 11px; padding: 8px 10px; border: 1px solid var(--theme-border); border-radius: 6px; color: var(--theme-muted); background: color-mix(in srgb, var(--theme-input-bg) 72%, transparent); font-size: 10px; line-height: 1.5; }
+.generation-capability-note strong { color: var(--theme-font); font-size: 10px; font-weight: 600; }
+.generation-capability-badge { display: inline-flex; align-items: center; padding: 4px 7px; border: 1px solid var(--theme-border); border-radius: 999px; color: var(--theme-muted); font-size: 10px; white-space: nowrap; }
 .generation-token-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 15px; }
 .generation-token-field { min-width: 0; margin: 0; }
 .generation-token-field > span { color: var(--theme-font); }

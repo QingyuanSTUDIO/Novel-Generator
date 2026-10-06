@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { Check, ChevronDown, FilePlus2, FileText, FolderOpen, Minimize2, Minus, Moon, Save, Settings2, Square, Sun, X } from 'lucide-vue-next'
 import QyLogo from './QyLogo.vue'
+import McpConnectionIndicator from './McpConnectionIndicator.vue'
 
 const props = defineProps<{
   title: string
@@ -76,22 +77,23 @@ function close() {
       <div class="desktop-file-menu" @click.stop @dblclick.stop>
         <button class="desktop-file-trigger" type="button" :aria-expanded="fileMenuOpen" title="文件" @click="fileMenuOpen = !fileMenuOpen"><FileText :size="14" /><span>文件</span><ChevronDown :size="12" /></button>
         <div v-if="fileMenuOpen" class="desktop-file-dropdown" role="menu">
-          <button type="button" role="menuitem" :disabled="fileBusy" @click="fileMenuOpen = false; emit('newFile')"><FilePlus2 :size="14" /><span>新建作品文件</span></button>
-          <button type="button" role="menuitem" :disabled="fileBusy" @click="fileMenuOpen = false; emit('openFile')"><FolderOpen :size="14" /><span>打开 .qy 文件</span></button>
-          <button type="button" role="menuitem" :disabled="fileBusy || !props.filePath" @click="fileMenuOpen = false; emit('saveFile')"><Save :size="14" /><span>保存</span><small v-if="!props.filePath">未建立文件</small></button>
-          <button type="button" role="menuitem" :disabled="fileBusy" @click="fileMenuOpen = false; emit('saveAsFile')"><Save :size="14" /><span>另存为 .qy</span></button>
+          <button type="button" role="menuitem" :disabled="fileBusy" @click="fileMenuOpen = false; emit('newFile')"><FilePlus2 :size="14" /><span>新建作品集</span></button>
+          <button type="button" role="menuitem" :disabled="fileBusy" @click="fileMenuOpen = false; emit('openFile')"><FolderOpen :size="14" /><span>打开作品集</span></button>
+          <button type="button" role="menuitem" :disabled="fileBusy" @click="fileMenuOpen = false; emit('saveFile')"><Save :size="14" /><span>保存作品集</span><small v-if="!props.filePath">首次保存选择 .qy 文件</small></button>
+          <button type="button" role="menuitem" :disabled="fileBusy" @click="fileMenuOpen = false; emit('saveAsFile')"><Save :size="14" /><span>作品集另存为</span></button>
           <div v-if="props.recentFiles?.length" class="desktop-file-recent">
-            <span>最近打开</span>
+            <span>最近打开的作品集</span>
             <button v-for="item in props.recentFiles" :key="item.path" type="button" role="menuitem" @click="fileMenuOpen = false; emit('openRecentFile', item.path)">
               <span>{{ item.title || item.path }}</span>
               <small title="移除记录" @click.stop="emit('removeRecentFile', item.path)">×</small>
             </button>
           </div>
-          <p v-else class="desktop-file-empty">暂无最近作品</p>
+          <p v-else class="desktop-file-empty">暂无最近作品集</p>
         </div>
       </div>
     </div>
     <div class="desktop-titlebar-actions" @dblclick.stop>
+      <McpConnectionIndicator />
       <span :class="['save-status', { error: /失败|冲突|不可用/.test(saveState) }]">
         <span class="desktop-titlebar-save-icon"><span v-if="/失败|冲突|不可用/.test(saveState)">!</span><Check v-else :size="12" /></span>
         {{ saveState }}

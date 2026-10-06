@@ -14,6 +14,7 @@
 import { normalizeChatUsage, type ChatUsage } from './chatUsage.ts'
 import { prepareContextBudget } from './contextBudget.ts'
 import { defaultModelSettings } from './modelSettings.ts'
+import { normalizeProviderProtocol, providerSupportsParameter } from './providerCapabilities.ts'
 import { nextChatMetricsId, publishChatMetrics, type ChatMetrics } from './chatMetrics.ts'
 export type { ChatUsage } from './chatUsage.ts'
 
@@ -85,7 +86,7 @@ function isUnsetParameter(value: unknown) {
 /** Validate explicit settings and omit unset fields before contacting the proxy. */
 function prepareChatPayload(request: ChatRequest) {
   const { signal: _signal, ...payload } = request
-  const protocol = request.protocol || 'OpenAI Compatible'
+  const protocol = normalizeProviderProtocol(request.protocol)
   const ranges: Array<[keyof Pick<ChatRequest, 'maxTokens' | 'temperature' | 'topP' | 'frequencyPenalty' | 'presencePenalty'>, string, number, number, boolean?]> = [
     ['maxTokens', '最大输出 Tokens', 1, 2147483647, true],
     ['temperature', '温度', 0, protocol === 'Anthropic' ? 1 : 2],
@@ -98,19 +99,32 @@ function prepareChatPayload(request: ChatRequest) {
     if (value === undefined) delete payload[key]
     else payload[key] = value
   }
-  if (isUnsetParameter(payload.outputTokenParameter)) {
+  if (!providerSupportsParameter(protocol, 'outputTokenParameter')) {
+    // Native providers use a fixed output field. Do not pass the OpenAI-only
+    // selector through the local proxy where it could be mistaken for an
+    // upstream option.
+    delete payload.outputTokenParameter
+  } else if (isUnsetParameter(payload.outputTokenParameter)) {
     delete payload.outputTokenParameter
   } else if (!['max_tokens', 'max_completion_tokens'].includes(String(payload.outputTokenParameter))) {
     throw new Error('输出 Tokens 字段只支持 max_tokens 或 max_completion_tokens')
   }
-  if (isUnsetParameter(payload.includeUsage)) {
+  if (!providerSupportsParameter(protocol, 'includeUsage') || !payload.stream) {
+    // Gemini and Anthropic report usage as part of their normal response.
+    // Their request formats have no stream_options switch. OpenAI-compatible
+    // usage is a stream-only option, so omit it for a non-stream request too.
+    delete payload.includeUsage
+  } else if (isUnsetParameter(payload.includeUsage)) {
     delete payload.includeUsage
   } else if (typeof payload.includeUsage !== 'boolean') {
     throw new Error('流式用量统计必须是开启或关闭')
   }
-  if (protocol === 'Anthropic') {
-    if (payload.frequencyPenalty !== undefined || payload.presencePenalty !== undefined) throw new Error('Anthropic 协议不支持频率惩罚和存在惩罚，请清空这两个参数')
+  for (const [key, label] of [['frequencyPenalty', '频率惩罚'], ['presencePenalty', '存在惩罚']] as const) {
+    if (!providerSupportsParameter(protocol, key) && payload[key] !== undefined) {
+      throw new Error(`${protocol} 协议不支持${label}，请清空这个参数`)
+    }
   }
+  if (!providerSupportsParameter(protocol, 'responseFormat')) delete payload.responseFormat
   return payload
 }
 

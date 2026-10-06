@@ -1,6 +1,21 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { validateAgentResponse } from '../src/agent/validation.ts'
+import { agentResourceTemplateFields } from '../src/agent/resourceFieldPolicy.ts'
+
+const completeCharacter = (title, extra = {}) => ({
+  action: 'create_resource',
+  resourceType: 'character',
+  title,
+  // 角色身份是标准卡中的枚举字段，空字符串不是有效枚举值。
+  // 其他没有内容的模板字段仍然必须显式返回空字符串。
+  fields: Object.fromEntries(agentResourceTemplateFields.character.map((field) => [
+    field,
+    field === '角色身份' ? '配角' : '',
+  ])),
+  includeAllFields: true,
+  ...extra,
+})
 
 const response = (operation) => validateAgentResponse({ message: '分组操作', operations: [operation] })
 
@@ -9,7 +24,7 @@ test('accepts group operations and explicit resource group assignment', () => {
     message: '整理条目',
     operations: [
       { action: 'create_resource_group', collection: 'characters', title: '主角团' },
-      { action: 'create_resource', resourceType: 'character', title: '林舟', groupTarget: '主角团' },
+      completeCharacter('林舟', { groupTarget: '主角团' }),
       { action: 'move_resource_to_group', collection: 'characters', target: '林舟', groupTarget: '主角团' },
       { action: 'move_resource_to_group', collection: 'characters', target: '林舟', groupTarget: null },
       { action: 'delete_resource_group', collection: 'characters', target: '主角团' },

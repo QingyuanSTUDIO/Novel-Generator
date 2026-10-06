@@ -7,7 +7,12 @@ import {
 } from '../data/customModules.ts'
 import { createDefaultWorldEngineState } from '../data/worldEngine.ts'
 import { canonicalTriggerField, normalizeResourceTriggers, updateResourceTriggerField } from '../context/retrieval.ts'
-import { agentResourceTemplateFields, normalizeAgentResourceFields, unknownAgentResourceFields } from './resourceFieldPolicy.ts'
+import {
+  missingAgentResourceTemplateFields,
+  normalizeAgentResourceFields,
+  strictStandardResourceTypes,
+  unknownAgentResourceFields,
+} from './resourceFieldPolicy.ts'
 import type { AgentOperation, AgentResourceType, GroupedResourceCollection } from './schema.ts'
 import type {
   Chapter,
@@ -16,6 +21,8 @@ import type {
   CustomModuleFieldType,
   CustomModuleFieldValue,
   CustomModuleSchema,
+  AgentOperationReview,
+  AgentPlanFieldDiff,
   Resource,
   Store,
   Volume,
@@ -574,8 +581,14 @@ export function createAgentOperations(options: AgentOperationsOptions) {
         const event = eventById ?? eventsByTitle[0]
         if (!event) throw new Error(`没有找到名为“${operation.target}”的世界引擎事件`)
         if (isLockedAll(event)) throw new Error(`世界引擎事件“${event.title}”已整体锁定，Agent 不能修改`)
-        if (operation.title?.trim()) event.title = operation.title.trim()
-        if (operation.summary?.trim()) event.summary = operation.summary.trim()
+        if (Object.prototype.hasOwnProperty.call(operation, 'title')) {
+          const title = operation.title?.trim() ?? ''
+          if (!title) throw new Error('世界引擎事件名称不能为空；如需清空描述，请只提交 summary: ""')
+          event.title = title
+        }
+        if (Object.prototype.hasOwnProperty.call(operation, 'summary')) {
+          event.summary = operation.summary?.trim() ?? ''
+        }
         const fields = normalizeAgentResourceFields(operation.resourceType, operation.fields)
         for (const [field, value] of Object.entries(fields)) {
           const kinds = ['trend', 'event', 'action', 'discovery', 'consequence']
@@ -600,10 +613,14 @@ export function createAgentOperations(options: AgentOperationsOptions) {
     if (operation.action === 'create_resource') {
       const page = options.agentPageForType(operation.resourceType)
       const fields = normalizeAgentResourceFields(operation.resourceType, operation.fields)
-      const missingTemplateFields = agentResourceTemplateFields[operation.resourceType]
-        .filter((field) => !Object.prototype.hasOwnProperty.call(fields, field))
-      if (missingTemplateFields.length && operation.includeAllFields === true) {
-        throw new Error(`创建${resourceLabels[operation.resourceType]}时必须返回完整结构；缺少字段：${missingTemplateFields.join('、')}。没有内容的字段也请填写空字符串。`)
+      if (strictStandardResourceTypes.includes(operation.resourceType as (typeof strictStandardResourceTypes)[number])) {
+        if (operation.includeAllFields !== true) {
+          throw new Error(`创建${resourceLabels[operation.resourceType]}时必须显式设置 includeAllFields:true，并返回完整模板，不能只返回摘要`)
+        }
+        const missingTemplateFields = missingAgentResourceTemplateFields(operation.resourceType, fields)
+        if (missingTemplateFields.length) {
+          throw new Error(`创建${resourceLabels[operation.resourceType]}时必须返回完整结构；缺少字段：${missingTemplateFields.join('、')}。没有内容的字段也请填写空字符串。`)
+        }
       }
       const unknownFields = unknownAgentResourceFields(operation.resourceType, fields)
       if (unknownFields.length) {
@@ -645,13 +662,15 @@ export function createAgentOperations(options: AgentOperationsOptions) {
       ? resolveHoldingReferences('skills', operation.holdingSkills)
       : undefined
     const skipped: string[] = []
-    if (operation.title?.trim()) {
+    if (Object.prototype.hasOwnProperty.call(operation, 'title')) {
+      const title = operation.title?.trim() ?? ''
+      if (!title) throw new Error('条目名称不能为空；如需清空描述，请只提交 summary: ""')
       if (isFieldLocked(item, 'title')) skipped.push('名称')
-      else item.title = operation.title.trim()
+      else item.title = title
     }
-    if (operation.summary?.trim()) {
+    if (Object.prototype.hasOwnProperty.call(operation, 'summary')) {
       if (isFieldLocked(item, 'summary')) skipped.push('摘要/角色信息')
-      else item.summary = operation.summary.trim()
+      else item.summary = operation.summary?.trim() ?? ''
     }
     if (operation.fields) {
       const fields = normalizeAgentResourceFields(operation.resourceType, operation.fields)
@@ -685,6 +704,292 @@ export function createAgentOperations(options: AgentOperationsOptions) {
     if (operation.resourceType === 'character' && item.fields['角色身份']) item.tag = item.fields['角色身份']
     if (operation.resourceType === 'skill' && item.fields['技能性质']) item.tag = item.fields['技能性质']
     return skipped.length ? `已更新${item.title}的资料；已跳过锁定内容：${[...new Set(skipped)].join('、')}。` : `已更新${item.title}的资料。`
+  }
+
+  function reviewValue(value: unknown, limit = 420): unknown {
+    if (value === undefined) return undefined
+    if (typeof value === 'string') {
+      const normalized = value.replace(/\s+/g, ' ').trim()
+      return normalized.length > limit ? `${normalized.slice(0, limit)}…` : normalized
+    }
+    if (Array.isArray(value)) {
+      const normalized = value.map((item) => typeof item === 'string' ? item.trim() : item)
+      return normalized.length > 30 ? [...normalized.slice(0, 30), `…（共 ${normalized.length} 项）`] : normalized
+    }
+    if (value && typeof value === 'object') {
+      try {
+        const text = JSON.stringify(value)
+        return text.length > limit ? `${text.slice(0, limit)}…` : JSON.parse(text)
+      } catch {
+        return String(value)
+      }
+    }
+    return value
+  }
+
+  function reviewValueIsEmpty(value: unknown) {
+    return value === undefined || value === null || value === ''
+      || (Array.isArray(value) && value.length === 0)
+  }
+
+  function reviewValuesEqual(before: unknown, after: unknown) {
+    if (before === after) return true
+    try {
+      return JSON.stringify(before) === JSON.stringify(after)
+    } catch {
+      return false
+    }
+  }
+
+  function makePlanDiff(field: string, before: unknown, after: unknown, locked = false): AgentPlanFieldDiff | undefined {
+    if (!locked && reviewValuesEqual(before, after)) return undefined
+    const hasBefore = before !== undefined
+    const hasAfter = after !== undefined
+    let status: AgentPlanFieldDiff['status'] = 'changed'
+    if (locked) status = 'locked'
+    else if (!hasBefore && hasAfter) status = 'added'
+    else if (hasBefore && !hasAfter) status = 'removed'
+    else if (!reviewValueIsEmpty(before) && reviewValueIsEmpty(after)) status = 'cleared'
+    return {
+      field,
+      before: reviewValue(before),
+      after: reviewValue(after),
+      status,
+      ...(locked ? { locked: true } : {}),
+    }
+  }
+
+  function appendPlanDiff(
+    diffs: AgentPlanFieldDiff[],
+    field: string,
+    before: unknown,
+    after: unknown,
+    locked = false,
+  ) {
+    const diff = makePlanDiff(field, before, after, locked)
+    if (diff) diffs.push(diff)
+  }
+
+  function reviewResourceField(resourceType: AgentResourceType, resource: Resource | WorldEngineEvent | undefined, field: string): unknown {
+    if (!resource) return undefined
+    if (field === 'title') return resource.title
+    if (field === 'summary') return resource.summary
+    if (field === 'holdingItems') return 'holdingItems' in resource ? resource.holdingItems ?? [] : undefined
+    if (field === 'holdingSkills') return 'holdingSkills' in resource ? resource.holdingSkills ?? [] : undefined
+    if (field === 'reviewStatus') return 'reviewStatus' in resource ? resource.reviewStatus : undefined
+    if (resourceType === 'world_event') {
+      const event = resource as WorldEngineEvent
+      if (field === '类型') return event.kind
+      if (field === '状态') return event.status
+      if (field === '时间' || field === '发生时间') return event.scheduledTime
+      if (field === '后果') return event.consequences?.join('、') ?? ''
+      if (field === '内容' || field === '摘要') return event.summary
+      return undefined
+    }
+    if (field === 'outlineType') return (resource as Resource).outlineType
+    if (field === 'outlineParentId') return (resource as Resource).outlineParentId
+    if (field === 'outlineStartChapterId') return (resource as Resource).outlineStartChapterId
+    if (field === 'outlineEndChapterId') return (resource as Resource).outlineEndChapterId
+    if (field === 'outlineCollapsed') return (resource as Resource).outlineCollapsed
+    return 'fields' in resource ? resource.fields?.[field] : undefined
+  }
+
+  function reviewResourceTarget(resourceType: AgentResourceType, target: string): Resource | WorldEngineEvent | undefined {
+    try {
+      if (resourceType === 'world_event') {
+        const events = store.value.worldEngine?.events ?? []
+        return events.find((event) => event.id === target)
+          ?? events.find((event) => event.title.trim() === target.trim())
+      }
+      return findResource(resourceType, target)
+    } catch {
+      return undefined
+    }
+  }
+
+  function normalizeReviewAfter(resourceType: AgentResourceType, field: string, value: unknown): unknown {
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (field === '触发策略') return /^(always|常驻|永久|始终|全局|固定)$/i.test(trimmed) ? '常驻' : '关键词'
+      if (field === '触发键') return [...new Set(trimmed.split(/[\s,，、;；|｜/]+/g).map((item) => item.trim()).filter(Boolean))].join('、')
+      if (resourceType === 'skill' && field === '技能性质') return trimmed === '被动' ? '被动' : '主动'
+      if (['title', 'summary', 'outlineParentId', 'outlineStartChapterId', 'outlineEndChapterId'].includes(field)) return trimmed
+    }
+    return value
+  }
+
+  function resolveReviewHolding(collection: 'items' | 'skills', values: readonly string[]) {
+    try {
+      return resolveHoldingReferences(collection, values)
+    } catch {
+      return values
+    }
+  }
+
+  function reviewKind(action: AgentOperation['action']): AgentOperationReview['kind'] {
+    if (action.startsWith('create_')) return 'create'
+    if (action.startsWith('delete_')) return 'delete'
+    if (action.startsWith('move_')) return 'move'
+    if (action === 'append_chapter') return 'append'
+    if (action === 'search_web_memes') return 'search'
+    return 'update'
+  }
+
+  /**
+   * Build a serializable, field-level review without mutating the Store.
+   * This intentionally remains separate from `describeAgentOperation` so the
+   * existing approval and history text stays backwards compatible.
+   */
+  function describeAgentOperationReview(operation: AgentOperation, operationIndex = 0, targetContext?: { portfolioId?: string; projectId?: string }): AgentOperationReview {
+    const kind = reviewKind(operation.action)
+    const diffs: AgentPlanFieldDiff[] = []
+    let title = describeAgentOperation(operation)
+    let target: string | undefined
+    const resourceType = 'resourceType' in operation ? operation.resourceType : undefined
+    const targetPath: AgentOperationReview['targetPath'] = {
+      ...targetContext,
+      collection: resourceType === 'character' ? 'characters'
+        : resourceType === 'item' ? 'items'
+          : resourceType === 'skill' ? 'skills'
+            : resourceType === 'world' ? 'world'
+              : resourceType === 'style' ? 'style'
+                : resourceType === 'outline' ? 'outline'
+                  : resourceType === 'world_event' ? 'worldEngine'
+                    : undefined,
+    }
+    if (operation.action === 'search_web_memes') {
+      appendPlanDiff(diffs, '搜索引擎', undefined, operation.engine)
+      appendPlanDiff(diffs, '关键词', undefined, operation.query)
+      appendPlanDiff(diffs, '最多条数', undefined, operation.limit)
+      return { operationIndex, action: operation.action, kind, title, targetPath, diffs }
+    }
+    if (operation.action === 'create_resource') {
+      appendPlanDiff(diffs, '名称', undefined, normalizeReviewAfter(operation.resourceType, 'title', operation.title))
+      if (Object.prototype.hasOwnProperty.call(operation, 'summary')) appendPlanDiff(diffs, '摘要/角色信息', undefined, normalizeReviewAfter(operation.resourceType, 'summary', operation.summary ?? ''))
+      const fields = normalizeAgentResourceFields(operation.resourceType, operation.fields)
+      for (const [field, value] of Object.entries(fields)) {
+        if (operation.resourceType === 'style' && legacyStyleMetadataFields.has(field)) continue
+        appendPlanDiff(diffs, field, undefined, normalizeReviewAfter(operation.resourceType, field, value))
+      }
+      if (operation.holdingItems) appendPlanDiff(diffs, '持有道具', undefined, resolveReviewHolding('items', operation.holdingItems))
+      if (operation.holdingSkills) appendPlanDiff(diffs, '持有技能', undefined, resolveReviewHolding('skills', operation.holdingSkills))
+      if (operation.groupTarget !== undefined) appendPlanDiff(diffs, '折叠栏', undefined, operation.groupTarget ?? '未分组')
+      if (operation.outlineType !== undefined) appendPlanDiff(diffs, '大纲层级', undefined, operation.outlineType)
+      if (operation.outlineParentId !== undefined) appendPlanDiff(diffs, '上级大纲', undefined, operation.outlineParentId || '无')
+      if (operation.outlineStartChapterId !== undefined) appendPlanDiff(diffs, '起始章节', undefined, operation.outlineStartChapterId || '无')
+      if (operation.outlineEndChapterId !== undefined) appendPlanDiff(diffs, '结束章节', undefined, operation.outlineEndChapterId || '无')
+      if (operation.outlineCollapsed !== undefined) appendPlanDiff(diffs, '折叠状态', undefined, operation.outlineCollapsed ? '折叠' : '展开')
+      return { operationIndex, action: operation.action, kind, title, target: operation.title, targetPath, diffs }
+    }
+    if (operation.action === 'update_resource') {
+      target = operation.target
+      const resource = reviewResourceTarget(operation.resourceType, operation.target)
+      const allLocked = Boolean(resource && isLockedAll(resource))
+      title = describeAgentOperation(operation)
+      if (Object.prototype.hasOwnProperty.call(operation, 'title')) {
+        appendPlanDiff(diffs, '名称', reviewResourceField(operation.resourceType, resource, 'title'), normalizeReviewAfter(operation.resourceType, 'title', operation.title ?? ''), allLocked || Boolean(resource && isFieldLocked(resource as Resource, 'title')))
+      }
+      if (Object.prototype.hasOwnProperty.call(operation, 'summary')) {
+        appendPlanDiff(diffs, '摘要/角色信息', reviewResourceField(operation.resourceType, resource, 'summary'), normalizeReviewAfter(operation.resourceType, 'summary', operation.summary ?? ''), allLocked || Boolean(resource && isFieldLocked(resource as Resource, 'summary')))
+      }
+      const fields = normalizeAgentResourceFields(operation.resourceType, operation.fields)
+      for (const [field, value] of Object.entries(fields)) {
+        if (operation.resourceType === 'style' && legacyStyleMetadataFields.has(field)) continue
+        appendPlanDiff(diffs, field, reviewResourceField(operation.resourceType, resource, field), normalizeReviewAfter(operation.resourceType, field, value), allLocked || Boolean(resource && isFieldLocked(resource as Resource, field)))
+      }
+      if (operation.holdingItems) appendPlanDiff(diffs, '持有道具', reviewResourceField(operation.resourceType, resource, 'holdingItems'), resolveReviewHolding('items', operation.holdingItems), allLocked || Boolean(resource && isFieldLocked(resource as Resource, 'holdingItems')))
+      if (operation.holdingSkills) appendPlanDiff(diffs, '持有技能', reviewResourceField(operation.resourceType, resource, 'holdingSkills'), resolveReviewHolding('skills', operation.holdingSkills), allLocked || Boolean(resource && isFieldLocked(resource as Resource, 'holdingSkills')))
+      if (operation.reviewStatus !== undefined) appendPlanDiff(diffs, '校对状态', reviewResourceField(operation.resourceType, resource, 'reviewStatus'), operation.reviewStatus, allLocked || Boolean(resource && 'reviewStatusLocked' in resource && resource.reviewStatusLocked))
+      const outlineFields: Array<[keyof typeof operation, string]> = [
+        ['outlineType', '大纲层级'],
+        ['outlineParentId', '上级大纲'],
+        ['outlineStartChapterId', '起始章节'],
+        ['outlineEndChapterId', '结束章节'],
+        ['outlineCollapsed', '折叠状态'],
+      ]
+      for (const [key, label] of outlineFields) {
+        if (operation[key] === undefined) continue
+        const value = operation[key]
+        const after = key === 'outlineCollapsed' ? (value ? '折叠' : '展开') : (value || '无')
+        appendPlanDiff(diffs, label, reviewResourceField(operation.resourceType, resource, key), after, allLocked || Boolean(resource && isFieldLocked(resource as Resource, key)))
+      }
+      return { operationIndex, action: operation.action, kind, title, target, targetPath, diffs }
+    }
+    if (operation.action === 'create_resource_group') {
+      appendPlanDiff(diffs, '折叠栏', undefined, operation.title)
+      return { operationIndex, action: operation.action, kind, title, target: operation.title, targetPath: { collection: operation.collection }, diffs }
+    }
+    if (operation.action === 'delete_resource_group') {
+      target = operation.target
+      const group = (() => { try { return findGroup(operation.collection, operation.target) } catch { return undefined } })()
+      appendPlanDiff(diffs, '折叠栏', group?.title ?? operation.target, undefined)
+      const resources = group ? (store.value[operation.collection] as Resource[]).filter((item) => item.groupId === group.id) : []
+      if (group) appendPlanDiff(diffs, '包含条目', resources.length, undefined)
+      return { operationIndex, action: operation.action, kind, title, target, targetPath: { collection: operation.collection }, diffs }
+    }
+    if (operation.action === 'move_resource_to_group') {
+      target = operation.target
+      const resource = (() => { try { return findGroupedResource(operation.collection, operation.target) } catch { return undefined } })()
+      const beforeGroup = resource?.groupId ? (store.value.resourceGroups[operation.collection] ?? []).find((group) => group.id === resource.groupId)?.title : '未分组'
+      const afterGroup = operation.groupTarget === null ? '未分组' : operation.groupTarget
+      appendPlanDiff(diffs, '折叠栏', beforeGroup, afterGroup)
+      return { operationIndex, action: operation.action, kind, title, target, targetPath: { collection: operation.collection }, diffs }
+    }
+    if (operation.action === 'create_volume') {
+      appendPlanDiff(diffs, '分卷名称', undefined, operation.title)
+      return { operationIndex, action: operation.action, kind, title, target: operation.title, targetPath: { collection: 'volumes' }, diffs }
+    }
+    if (operation.action === 'create_chapter') {
+      appendPlanDiff(diffs, '章节名称', undefined, operation.title)
+      if (Object.prototype.hasOwnProperty.call(operation, 'content')) appendPlanDiff(diffs, '正文', undefined, operation.content ?? '')
+      if (operation.volumeId) appendPlanDiff(diffs, '所属分卷', undefined, operation.volumeId)
+      return { operationIndex, action: operation.action, kind, title, target: operation.title, targetPath: { collection: 'chapters' }, diffs }
+    }
+    if (operation.action === 'append_chapter') {
+      const chapter = operation.chapterId
+        ? store.value.chapters.find((item) => item.id === operation.chapterId)
+        : activeChapter.value
+      appendPlanDiff(diffs, '追加正文', chapter?.content ?? '', `${chapter?.content ? `${chapter.content.trimEnd()}\n\n` : ''}${operation.content.trim()}`)
+      return { operationIndex, action: operation.action, kind, title, target: chapter?.title ?? operation.chapterId, targetPath: { collection: 'chapters' }, diffs }
+    }
+    if (operation.action === 'create_custom_module') {
+      appendPlanDiff(diffs, '模块名称', undefined, operation.title)
+      if (operation.type !== undefined) appendPlanDiff(diffs, '模块类型', undefined, operation.type)
+      if (operation.description !== undefined) appendPlanDiff(diffs, '模块说明', undefined, operation.description)
+      if (operation.fields) appendPlanDiff(diffs, '字段定义', undefined, operation.fields.map((field) => `${field.label || field.key}（${field.type}）`))
+      return { operationIndex, action: operation.action, kind, title, target: operation.title, targetPath: { collection: 'customModules.schemas' }, diffs }
+    }
+    if (operation.action === 'create_custom_module_entry') {
+      const schemaId = operationCustomSchemaId(operation) || '未指定模块'
+      appendPlanDiff(diffs, '条目名称', undefined, operation.title ?? '')
+      for (const [field, value] of Object.entries(operation.data ?? {})) appendPlanDiff(diffs, field, undefined, value)
+      return { operationIndex, action: operation.action, kind, title, target: schemaId, targetPath: { collection: `customModules.${schemaId}` }, diffs }
+    }
+    if (operation.action === 'update_custom_module_entry' || operation.action === 'delete_custom_module_entry') {
+      const schemaId = operationCustomSchemaId(operation) || '未指定模块'
+      target = customEntryTarget(operation)
+      let schema: CustomSchemaWithAgentLocks | undefined
+      let entry: CustomEntryWithAgentLocks | undefined
+      try {
+        schema = findCustomSchema(operation)
+        entry = target ? findCustomEntry(schema, target) : undefined
+      } catch {
+        schema = undefined
+      }
+      if (operation.action === 'delete_custom_module_entry') {
+        appendPlanDiff(diffs, '条目名称', entry?.title ?? target, undefined)
+        for (const [field, value] of Object.entries(entry?.data ?? {})) appendPlanDiff(diffs, field, value, undefined)
+      } else {
+        if (Object.prototype.hasOwnProperty.call(operation, 'title')) appendPlanDiff(diffs, '条目名称', entry?.title, operation.title ?? '', Boolean(entry?.lockedAll || entry?.lockedFields?.includes('title')))
+        for (const [field, value] of Object.entries(operation.data ?? {})) {
+          const definition = schema?.fields.find((candidate) => candidate.key === field || candidate.id === field)
+          const canonical = definition?.key ?? field
+          appendPlanDiff(diffs, canonical, entry?.data?.[canonical], value, Boolean(entry?.lockedAll || (entry && definition && customFieldIsLocked(entry, definition))))
+        }
+      }
+      return { operationIndex, action: operation.action, kind, title, target: `${schemaId} / ${target ?? '未指定条目'}`, targetPath: { collection: `customModules.${schemaId}` }, diffs }
+    }
+    return { operationIndex, action: (operation as AgentOperation).action, kind, title, targetPath, diffs }
   }
 
   function describeAgentOperation(operation: AgentOperation, precedingOperations: AgentOperation[] = []) {
@@ -746,9 +1051,13 @@ export function createAgentOperations(options: AgentOperationsOptions) {
     }
     if (operation.action === 'append_chapter') return `追加 ${operation.content.replace(/\s/g, '').length} 字到章节正文：\n${preview(operation.content, 320)}`
     const parts = [`更新${resourceLabels[operation.resourceType]}“${operation.target}”`]
-    if (operation.title) parts.push(`名称：${preview(operation.title)}`)
-    if (operation.summary) parts.push(`摘要：${preview(operation.summary)}`)
-    if (operation.fields) parts.push(...Object.entries(operation.fields).filter(([field]) => operation.resourceType !== 'style' || !legacyStyleMetadataFields.has(field)).map(([field, value]) => `${field}：${preview(value)}`))
+    if (Object.prototype.hasOwnProperty.call(operation, 'title')) parts.push(`名称：${preview(operation.title ?? '') || '清空'}`)
+    if (Object.prototype.hasOwnProperty.call(operation, 'summary')) parts.push(`摘要：${preview(operation.summary ?? '') || '清空'}`)
+    if (operation.fields) {
+      parts.push(...Object.entries(operation.fields)
+        .filter(([field]) => operation.resourceType !== 'style' || !legacyStyleMetadataFields.has(field))
+        .map(([field, value]) => `${field}：${preview(value) || '清空'}`))
+    }
     if (operation.holdingItems) parts.push(`持有道具：${operation.holdingItems.join('、') || '清空'}`)
     if (operation.holdingSkills) parts.push(`持有技能：${operation.holdingSkills.join('、') || '清空'}`)
     if (operation.reviewStatus) parts.push(`校对状态：${operation.reviewStatus === 'complete' ? '完成' : '待修改'}`)
@@ -775,5 +1084,5 @@ export function createAgentOperations(options: AgentOperationsOptions) {
     return parts.join('\n')
   }
 
-  return { applyAgentOperation, describeAgentOperation }
+  return { applyAgentOperation, describeAgentOperation, describeAgentOperationReview }
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDown, PenLine, Plus, Trash2 } from 'lucide-vue-next'
+import { ChevronDown, PenLine, Plus, Search, Trash2 } from 'lucide-vue-next'
 import QyLogo from './QyLogo.vue'
 
 defineProps<{
@@ -13,7 +13,7 @@ defineProps<{
 
 const sections = ['开始写作', '创作空间', '全局把握', 'AI功能', '全局功能', 'Debug'] as const
 
-const emit = defineEmits<{ navigate: [page: string]; toggleProjectMenu: []; newProject: []; selectProject: [id: string]; renameProject: []; deleteProject: [] }>()
+const emit = defineEmits<{ navigate: [page: string]; toggleProjectMenu: []; globalSearch: []; newProject: []; selectProject: [id: string]; renameProject: []; deleteProject: [] }>()
 </script>
 
 <template>
@@ -32,6 +32,7 @@ const emit = defineEmits<{ navigate: [page: string]; toggleProjectMenu: []; newP
         <button class="project-menu-new" type="button" @click="emit('newProject')"><Plus :size="15" /><span><strong>新建作品</strong><small>从空白作品开始</small></span></button>
       </div>
     </div>
+    <button class="sidebar-search-button" type="button" title="搜索全部资料（Ctrl/Cmd+K）" @click="emit('globalSearch')"><Search :size="15" /><span>搜索全部资料</span><kbd>Ctrl/Cmd K</kbd></button>
     <nav class="nav-list" aria-label="作品模块">
       <template v-for="(section, sectionIndex) in sections" :key="section">
         <span :class="['nav-label', { 'nav-label-spaced': sectionIndex > 0 }]">{{ section }}</span>

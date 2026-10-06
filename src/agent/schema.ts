@@ -277,6 +277,23 @@ export const agentResponseSchema = {
               outlineEndChapterId: { type: 'string', description: '章节范围的结束章节 ID' },
               outlineCollapsed: { type: 'boolean', description: '是否默认折叠子大纲' },
             },
+            allOf: [
+              {
+                if: {
+                  properties: { resourceType: { enum: ['world', 'character', 'item', 'skill'] } },
+                  required: ['resourceType'],
+                },
+                then: {
+                  required: ['fields', 'includeAllFields'],
+                  properties: {
+                    includeAllFields: {
+                      const: true,
+                      description: '标准世界书、角色、道具、技能创建必须显式确认返回完整模板',
+                    },
+                  },
+                },
+              },
+            ],
           },
           {
             type: 'object',
@@ -286,12 +303,12 @@ export const agentResponseSchema = {
               action: { const: 'update_resource' },
               resourceType: { enum: ['world', 'character', 'item', 'skill', 'outline', 'world_event', 'style'] },
               target: { type: 'string', description: '目标资源 ID 或名称' },
-              title: { type: 'string' },
-              summary: { type: 'string' },
+              title: { type: 'string', minLength: 1, description: '新的条目名称；不能设为空字符串' },
+              summary: { type: 'string', description: '新的摘要；显式传入空字符串表示清空摘要' },
               fields: {
                 type: 'object',
                 additionalProperties: { type: 'string' },
-                description: '只能更新固定模板字段或目标条目中已经存在的字段；规范格式使用中文字段名，兼容接受 triggerStrategy/triggerKeys/content/scope/status 等常见 camelCase 别名并会自动归一化；不要凭空新增自定义结构字段。',
+                description: '只能更新固定模板字段或目标条目中已经存在的字段；规范格式使用中文字段名，兼容接受 triggerStrategy/triggerKeys/content/scope/status 等常见 camelCase 别名并会自动归一化；字段值允许为空字符串，表示清空该字段；不要凭空新增自定义结构字段。',
               },
               holdingItems: { type: 'array', items: { type: 'string' } },
               holdingSkills: { type: 'array', items: { type: 'string' } },

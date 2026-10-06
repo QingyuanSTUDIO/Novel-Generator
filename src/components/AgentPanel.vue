@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { Archive, Check, Circle, ClipboardCheck, Feather, History, Lightbulb, LoaderCircle, MessageSquare, MoreVertical, PenLine, Plus, RotateCcw, Send, Sparkles, Terminal, Trash2, X } from 'lucide-vue-next'
+import { Archive, Check, ChevronLeft, ChevronRight, Circle, ClipboardCheck, Feather, History, Lightbulb, LoaderCircle, MessageSquare, MoreVertical, PenLine, Plus, RotateCcw, Send, Sparkles, Terminal, Trash2, X } from 'lucide-vue-next'
 import { computed, nextTick, ref, watch } from 'vue'
 import AgentActivityLog from './AgentActivityLog.vue'
 import ContextUsageIndicator from './ContextUsageIndicator.vue'
+import { removeOperationIndexesWithDependents, selectOperationIndexesWithDependencies } from '../agent/planDependencies'
 import type { ContextBudgetReport } from '../api/contextBudget'
 import type { ChatUsage } from '../api/chatUsage'
-import type { AgentActivityEvent, AgentConversation, AgentHistoryEntry, AgentLiveResponse, AgentMessage, AgentMode, AgentPlan, AgentQuickAction, AgentTask, Resource } from '../types'
+import ContextPreviewPanel from './ContextPreviewPanel.vue'
+import type { ContextPreviewSnapshot } from '../context/contextPreview'
+import type { AgentActivityEvent, AgentConversation, AgentHistoryEntry, AgentLiveResponse, AgentMessage, AgentMode, AgentPlan, AgentPlanFieldDiff, AgentQuickAction, AgentTask, Resource } from '../types'
 
 const props = defineProps<{
   messages: AgentMessage[]
@@ -21,6 +24,7 @@ const props = defineProps<{
   metricsStatus?: 'preview' | 'running' | 'done' | 'error'
   contextBudgetLabel?: string
   contextBudgetError?: string
+  contextPreview?: ContextPreviewSnapshot | null
   quickActions: AgentQuickAction[]
   busy: boolean
   modelLabel: string
@@ -37,7 +41,7 @@ const emit = defineEmits<{
   send: [prompt: string]
   quick: [prompt: string]
   close: []
-  approvePlan: []
+  approvePlan: [operationIndexes: number[]]
   rejectPlan: []
   undoHistory: [id: string]
   resetTasks: []
@@ -54,8 +58,14 @@ const emit = defineEmits<{
 const draft = ref('')
 watch(draft, (value) => emit('draftChanged', value), { immediate: true })
 const openConversationMenuId = ref<string | null>(null)
+const leftRailCollapsed = ref(false)
+const rightRailCollapsed = ref(false)
 const messagesElement = ref<HTMLElement | null>(null)
 const followLatestMessage = ref(true)
+const selectedPlanOperations = ref<number[]>([])
+const selectedPlanCount = computed(() => selectedPlanOperations.value.length)
+const allPlanOperationsSelected = computed(() => Boolean(props.pendingPlan?.operations.length)
+  && selectedPlanCount.value === props.pendingPlan!.operations.length)
 const hasLiveResponse = computed(() => Boolean(props.liveResponse && (props.liveResponse.streaming || props.liveResponse.message)))
 const executionLabel = computed(() => {
   if (props.busy) return '执行中'
@@ -84,6 +94,12 @@ watch(() => [
   const element = messagesElement.value
   if (element) element.scrollTop = element.scrollHeight
 })
+
+watch(() => [props.pendingPlan?.id, props.pendingPlan?.operations.length] as const, () => {
+  selectedPlanOperations.value = props.pendingPlan
+    ? props.pendingPlan.operations.map((_, index) => index)
+    : []
+}, { immediate: true })
 
 watch(() => props.activeConversationId, async () => {
   followLatestMessage.value = true
@@ -129,6 +145,43 @@ function emitConversationAction(event: 'renameConversation' | 'archiveConversati
   else emit('deleteConversation', id)
 }
 
+function formatReviewValue(value: unknown) {
+  if (value === undefined) return '未设置'
+  if (value === '') return '空字符串'
+  if (Array.isArray(value)) return value.length ? value.join('、') : '空数组'
+  if (typeof value === 'object' && value !== null) {
+    try { return JSON.stringify(value) } catch { return String(value) }
+  }
+  return String(value)
+}
+
+function reviewStatusLabel(status: AgentPlanFieldDiff['status']) {
+  return status === 'added' ? '新增' : status === 'changed' ? '修改' : status === 'cleared' ? '清空' : status === 'removed' ? '移除' : '锁定'
+}
+
+function historySourceLabel(source: AgentHistoryEntry['source']) {
+  return source === 'console' ? '控制台' : source === 'manual' ? '手动' : 'Agent'
+}
+
+function toggleAllPlanOperations() {
+  if (!props.pendingPlan) return
+  selectedPlanOperations.value = allPlanOperationsSelected.value
+    ? []
+    : props.pendingPlan.operations.map((_, index) => index)
+}
+
+function togglePlanOperation(index: number, checked: boolean) {
+  if (!props.pendingPlan) return
+  selectedPlanOperations.value = checked
+    ? selectOperationIndexesWithDependencies(props.pendingPlan.operations, [...selectedPlanOperations.value, index])
+    : removeOperationIndexesWithDependents(props.pendingPlan.operations, selectedPlanOperations.value, index)
+}
+
+function approveSelectedPlan() {
+  if (!selectedPlanOperations.value.length) return
+  emit('approvePlan', [...selectedPlanOperations.value].sort((a, b) => a - b))
+}
+
 </script>
 
 <template>
@@ -145,8 +198,12 @@ function emitConversationAction(event: 'renameConversation' | 'archiveConversati
       </div>
     </header>
 
-    <div class="agent-layout">
-      <aside class="agent-conversations-panel">
+    <div :class="['agent-layout', { 'left-rail-collapsed': leftRailCollapsed, 'right-rail-collapsed': rightRailCollapsed, 'both-rails-collapsed': leftRailCollapsed && rightRailCollapsed }]">
+      <aside :class="['agent-conversations-panel', { 'is-collapsed': leftRailCollapsed }]">
+        <button class="agent-rail-toggle agent-rail-toggle-left" type="button" :title="leftRailCollapsed ? '展开对话栏' : '折叠对话栏'" :aria-label="leftRailCollapsed ? '展开对话栏' : '折叠对话栏'" @click="leftRailCollapsed = !leftRailCollapsed">
+          <ChevronRight v-if="leftRailCollapsed" :size="15" /><ChevronLeft v-else :size="15" />
+        </button>
+        <template v-if="!leftRailCollapsed">
         <div class="agent-conversations-head">
           <div class="agent-panel-label"><MessageSquare :size="15" /><span>对话</span></div>
           <button class="agent-new-conversation" type="button" :disabled="!props.canSwitchConversation" title="新建对话" aria-label="新建对话" @click="emit('newConversation')"><Plus :size="14" /><span>新建</span></button>
@@ -173,6 +230,7 @@ function emitConversationAction(event: 'renameConversation' | 'archiveConversati
           <div v-if="!props.conversations.length" class="agent-conversations-empty">暂无对话</div>
         </div>
         <div class="agent-conversation-note">每个作品的对话会独立保存。新建对话后，当前上下文资料仍会按作品设置读取。</div>
+        </template>
       </aside>
 
       <section class="agent-chat-panel">
@@ -192,8 +250,30 @@ function emitConversationAction(event: 'renameConversation' | 'archiveConversati
           <article v-if="props.pendingPlan" class="agent-plan-card">
             <div class="agent-plan-head"><div class="agent-panel-label"><ClipboardCheck :size="15" /><span>待确认修改</span></div><strong>尚未写入作品</strong></div>
             <p class="agent-plan-message">{{ props.pendingPlan.message }}</p>
-            <ul class="agent-plan-list"><li v-for="(description, index) in props.pendingPlan.descriptions" :key="index">{{ description }}</li></ul>
-            <div class="agent-plan-actions"><button class="button secondary" type="button" :disabled="props.busy" @click="emit('rejectPlan')"><X :size="14" />取消修改</button><button class="button primary" type="button" :disabled="props.busy" @click="emit('approvePlan')"><Check :size="14" />确认执行</button></div>
+            <div class="agent-plan-selection-toolbar">
+              <span>选择要执行的操作：{{ selectedPlanCount }} / {{ props.pendingPlan.operations.length }}<small>依赖项会自动一并勾选</small></span>
+              <button class="agent-plan-selection-toggle" type="button" :disabled="props.busy" @click="toggleAllPlanOperations">{{ allPlanOperationsSelected ? '取消全选' : '全选' }}</button>
+            </div>
+            <div v-if="props.pendingPlan.reviews?.length" class="agent-plan-reviews">
+              <article v-for="review in props.pendingPlan.reviews" :key="review.operationIndex" class="agent-plan-review">
+                <div class="agent-plan-review-head"><label class="agent-plan-review-check"><input type="checkbox" :checked="selectedPlanOperations.includes(review.operationIndex)" :disabled="props.busy" @change="togglePlanOperation(review.operationIndex, ($event.target as HTMLInputElement).checked)" /><span class="agent-plan-review-kind">{{ review.kind === 'create' ? '创建' : review.kind === 'update' ? '更新' : review.kind === 'delete' ? '删除' : review.kind === 'move' ? '移动' : review.kind === 'append' ? '追加' : '检索' }}</span></label><strong>{{ review.title }}</strong></div>
+                <div v-if="review.target || review.targetPath" class="agent-plan-review-target">
+                  目标：{{ review.target || '新建' }}
+                  <small v-if="review.targetPath">（作品集 {{ review.targetPath.portfolioId || '当前' }} / 作品 {{ review.targetPath.projectId || '当前' }}<template v-if="review.targetPath.collection"> / {{ review.targetPath.collection }}</template>）</small>
+                </div>
+                <ul class="agent-plan-diff-list">
+                  <li v-for="diff in review.diffs" :key="`${review.operationIndex}-${diff.field}`" :class="[`agent-plan-diff-${diff.status}`]">
+                    <span class="agent-plan-diff-field">{{ diff.field }}</span>
+                    <span class="agent-plan-diff-status">{{ reviewStatusLabel(diff.status) }}</span>
+                    <span class="agent-plan-diff-values"><code>{{ formatReviewValue(diff.before) }}</code><span aria-hidden="true">→</span><code>{{ formatReviewValue(diff.after) }}</code></span>
+                  </li>
+                  <li v-if="!review.diffs.length" class="agent-plan-diff-empty">无可展示的字段变化</li>
+                </ul>
+              </article>
+            </div>
+            <ul v-else class="agent-plan-list"><li v-for="(description, index) in props.pendingPlan.descriptions" :key="index"><label class="agent-plan-review-check"><input type="checkbox" :checked="selectedPlanOperations.includes(index)" :disabled="props.busy" @change="togglePlanOperation(index, ($event.target as HTMLInputElement).checked)" /><span>{{ description }}</span></label></li></ul>
+            <p v-if="!selectedPlanCount" class="agent-plan-selection-warning" role="status">至少选择一项修改后才能执行。</p>
+            <div class="agent-plan-actions"><button class="button secondary" type="button" :disabled="props.busy" @click="emit('rejectPlan')"><X :size="14" />取消修改</button><button class="button primary" type="button" :disabled="props.busy || !selectedPlanCount" @click="approveSelectedPlan"><Check :size="14" />确认执行{{ selectedPlanCount < props.pendingPlan.operations.length ? `（${selectedPlanCount} 项）` : '' }}</button></div>
           </article>
           <div v-if="props.busy && !hasLiveResponse" class="agent-thinking"><LoaderCircle class="spin" :size="15" /><span>{{ props.tasks.find((task) => task.state === 'running')?.detail || 'Agent 正在执行当前任务…' }}</span></div>
         </div>
@@ -216,7 +296,12 @@ function emitConversationAction(event: 'renameConversation' | 'archiveConversati
         </form>
       </section>
 
-      <aside class="agent-activity-panel">
+      <aside :class="['agent-activity-panel', { 'is-collapsed': rightRailCollapsed }]">
+        <button class="agent-rail-toggle agent-rail-toggle-right" type="button" :title="rightRailCollapsed ? '展开状态栏' : '折叠状态栏'" :aria-label="rightRailCollapsed ? '展开状态栏' : '折叠状态栏'" @click="rightRailCollapsed = !rightRailCollapsed">
+          <ChevronLeft v-if="rightRailCollapsed" :size="15" /><ChevronRight v-else :size="15" />
+        </button>
+        <template v-if="!rightRailCollapsed">
+        <ContextPreviewPanel :preview="props.contextPreview" compact title="本次上下文资料" />
         <div class="agent-activity-head"><div class="agent-panel-label"><Circle :size="13" /><span>执行状态</span></div><div class="agent-activity-actions"><strong>{{ executionLabel }}</strong><button v-if="!props.busy && props.tasks.some((task) => task.state === 'error')" class="icon-button agent-reset-tasks" type="button" title="清除本次执行状态" aria-label="清除本次执行状态" @click="emit('resetTasks')"><RotateCcw :size="14" /></button></div></div>
         <ol class="agent-task-list">
           <li v-for="task in props.tasks" :key="task.id" :class="[`agent-task-${task.state}`]">
@@ -237,11 +322,24 @@ function emitConversationAction(event: 'renameConversation' | 'archiveConversati
           <div v-if="!props.history.length" class="agent-history-empty">暂无 Agent 修改</div>
           <article v-for="entry in props.history" :key="entry.id" class="agent-history-item">
             <strong>{{ entry.summary }}</strong>
-            <small>{{ formatTime(entry.createdAt) }} · {{ entry.status === 'undone' ? '已撤销' : '已执行' }}</small>
+            <small>{{ formatTime(entry.createdAt) }} · {{ historySourceLabel(entry.source) }} · {{ entry.status === 'undone' ? '已撤销' : '已执行' }}</small>
             <ul class="agent-history-changes"><li v-for="change in entry.changes" :key="change">{{ change }}</li></ul>
+            <details v-if="entry.reviews?.length" class="agent-history-review">
+              <summary>查看字段审阅（{{ entry.reviews.length }} 项操作）</summary>
+              <article v-for="review in entry.reviews" :key="review.operationIndex" class="agent-history-review-item">
+                <strong>{{ review.title }}</strong>
+                <ul v-if="review.diffs.length" class="agent-history-review-diffs">
+                  <li v-for="diff in review.diffs" :key="`${review.operationIndex}-${diff.field}`">
+                    <span>{{ diff.field }} · {{ reviewStatusLabel(diff.status) }}</span>
+                    <code>{{ formatReviewValue(diff.before) }} → {{ formatReviewValue(diff.after) }}</code>
+                  </li>
+                </ul>
+              </article>
+            </details>
             <button v-if="entry.status === 'applied'" class="agent-history-undo" type="button" :disabled="props.busy || entry.id !== props.undoableHistoryId" :title="entry.id === props.undoableHistoryId ? '撤销这次 Agent 修改' : '只能撤销最近一次未撤销修改'" @click="emit('undoHistory', entry.id)"><RotateCcw :size="12" />撤销</button>
           </article>
         </div>
+        </template>
       </aside>
     </div>
   </section>
@@ -265,6 +363,14 @@ function emitConversationAction(event: 'renameConversation' | 'archiveConversati
 .agent-surface .agent-panel-label svg { color: var(--theme-button); }
 .agent-surface .agent-task-done .agent-task-icon { color: var(--theme-success, var(--theme-button)); }
 .agent-surface .agent-new-conversation, .agent-surface .agent-history-undo { color: var(--theme-button); }
+.agent-history-review { margin-top: 8px; color: var(--theme-muted); font-size: 10px; }
+.agent-history-review summary { cursor: pointer; color: var(--theme-button); }
+.agent-history-review-item { margin-top: 7px; padding: 6px; border-left: 2px solid var(--theme-border); background: var(--theme-surface-soft); }
+.agent-history-review-item strong { padding-right: 0; color: var(--theme-font); font-size: 10px; }
+.agent-history-review-diffs { display: flex; flex-direction: column; gap: 3px; margin: 5px 0 0; padding: 0; list-style: none; }
+.agent-history-review-diffs li { display: flex; flex-wrap: wrap; gap: 4px 7px; align-items: baseline; }
+.agent-history-review-diffs code { max-width: 100%; overflow-wrap: anywhere; color: var(--theme-font); font-size: 9px; }
+.agent-plan-review-target small { color: var(--theme-muted); font-size: 10px; }
 @keyframes agent-cursor-blink { 50% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .agent-typing-cursor { animation: none; }

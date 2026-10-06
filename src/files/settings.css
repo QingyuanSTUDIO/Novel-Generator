@@ -1,0 +1,60 @@
+.portfolio-file-settings { min-width: 0; display: flex; flex-direction: column; gap: 16px; color: var(--theme-font); }
+.portfolio-file-settings *, .portfolio-file-settings *::before, .portfolio-file-settings *::after { box-sizing: border-box; }
+.portfolio-file-settings button, .portfolio-file-settings select { font: inherit; }
+.portfolio-file-settings button { cursor: pointer; }
+.portfolio-file-settings button:disabled { opacity: .48; cursor: default; }
+.portfolio-file-settings button:focus-visible, .portfolio-file-settings select:focus-visible { outline: 2px solid var(--theme-button); outline-offset: 2px; }
+.portfolio-file-settings-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 3px; }
+.portfolio-file-settings-heading > div { min-width: 0; }
+.portfolio-file-eyebrow { color: var(--theme-muted); font-size: 11px; }
+.portfolio-file-settings-heading h3 { display: flex; align-items: center; gap: 7px; margin: 6px 0 0; color: var(--theme-font); font-size: 20px; }
+.portfolio-file-settings-heading h3 > svg { flex: 0 0 auto; color: var(--theme-button); }
+.portfolio-file-settings-heading p { margin: 8px 0 0; color: var(--theme-muted); font-size: 12px; line-height: 1.7; }
+.portfolio-file-settings-card { min-width: 0; padding: 16px 18px; border: 1px solid var(--theme-border); border-radius: 7px; background: var(--theme-surface-muted); }
+.portfolio-file-card-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.portfolio-file-card-heading h4 { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--theme-font); font-size: 13px; }
+.portfolio-file-card-heading h4 > svg { color: var(--theme-button); }
+.portfolio-file-icon-button { flex: 0 0 auto; width: 29px; height: 29px; display: inline-grid; place-items: center; padding: 0; border: 0; border-radius: 5px; color: var(--theme-button); background: transparent; }
+.portfolio-file-icon-button:hover { background: var(--theme-hover); }
+.portfolio-file-button { min-height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 0 0 auto; padding: 6px 10px; border: 1px solid var(--theme-border); border-radius: 5px; color: var(--theme-font); background: var(--theme-workspace); font-size: 11px; white-space: nowrap; }
+.portfolio-file-button > svg { color: var(--theme-button); }
+.portfolio-file-button:hover { background: var(--theme-hover); }
+.portfolio-file-button-primary { color: var(--theme-button-text); border-color: var(--theme-button); background: var(--theme-button); }
+.portfolio-file-button-primary > svg { color: currentColor; }
+.portfolio-file-button-primary:hover { background: var(--theme-button-hover); }
+.portfolio-file-open-restored { margin-top: 10px; }
+.portfolio-file-path { display: block; min-width: 0; padding: 9px 11px; border-radius: 5px; color: var(--theme-font); background: var(--theme-workspace); font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; white-space: pre-wrap; user-select: text; }
+.portfolio-file-helper { margin: 9px 0 0; color: var(--theme-muted); font-size: 11px; line-height: 1.7; }
+.portfolio-file-directory { min-width: 0; display: flex; align-items: center; gap: 12px; padding: 10px 0; }
+.portfolio-file-directory > div { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.portfolio-file-directory > div > span { color: var(--theme-muted); font-size: 11px; }
+.portfolio-file-directory code { min-width: 0; color: var(--theme-font); font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; white-space: pre-wrap; user-select: text; }
+.portfolio-file-count-field { min-width: 0; display: flex; align-items: center; gap: 8px; margin-left: auto; color: var(--theme-muted); font-size: 11px; }
+.portfolio-file-count-field select { min-width: 0; min-height: 32px; padding: 5px 7px; border: 1px solid var(--theme-border); border-radius: 5px; color: var(--theme-font); background: var(--theme-input-bg); font-size: 11px; }
+.portfolio-file-message { min-width: 0; margin: 12px 0 0; padding: 9px 11px; border-radius: 5px; background: var(--theme-workspace); font-size: 11px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.portfolio-file-message-error { color: var(--theme-danger); background: color-mix(in srgb, var(--theme-danger) 9%, var(--theme-workspace)); }
+.portfolio-file-message-success { color: var(--theme-success); background: color-mix(in srgb, var(--theme-success) 8%, var(--theme-workspace)); }
+.portfolio-file-list-state { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 84px; margin-top: 14px; padding: 14px; border-radius: 5px; color: var(--theme-muted); background: var(--theme-workspace); font-size: 12px; text-align: center; }
+.portfolio-file-backup-list { min-width: 0; margin: 14px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.portfolio-file-backup { min-width: 0; display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 5px; background: var(--theme-workspace); }
+.portfolio-file-backup-detail { min-width: 0; flex: 1; }
+.portfolio-file-backup-detail > strong { display: block; color: var(--theme-font); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.portfolio-file-backup-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 12px; margin-top: 5px; color: var(--theme-muted); font-size: 10px; line-height: 1.6; }
+.portfolio-file-invalid-label, .portfolio-file-backup-error { color: var(--theme-danger); }
+.portfolio-file-backup-error { margin: 7px 0 0; font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }
+.portfolio-file-empty { min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px; color: var(--theme-muted); background: var(--theme-surface-muted); border-radius: 7px; font-size: 12px; text-align: center; }
+.portfolio-file-empty strong { color: var(--theme-font); font-size: 13px; }
+
+@media (max-width: 640px) {
+  .portfolio-file-settings-card { padding: 13px; }
+  .portfolio-file-backup { align-items: flex-start; flex-direction: column; }
+  .portfolio-file-backup > .portfolio-file-button { align-self: flex-end; }
+  .portfolio-file-count-field { flex-wrap: wrap; }
+}
+
+@media (max-width: 400px) {
+  .portfolio-file-directory { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .portfolio-file-directory > .portfolio-file-button { align-self: flex-end; }
+  .portfolio-file-backup-heading { align-items: flex-start; flex-direction: column; }
+  .portfolio-file-count-field { margin-left: 0; }
+}

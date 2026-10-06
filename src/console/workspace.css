@@ -1,0 +1,31 @@
+.writer-workspace {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.writer-console-dock {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  max-height: 70vh;
+  background: var(--theme-workspace);
+}
+.writer-console-dock > .console-panel { flex: 1; min-height: 0; }
+.console-resize-grip {
+  flex: 0 0 6px;
+  border-top: 1px solid var(--theme-border);
+  background: var(--theme-surface);
+  cursor: ns-resize;
+  touch-action: none;
+}
+.console-resize-grip:hover,
+.console-resize-grip:focus-visible { background: var(--theme-button); outline: none; }
+.main-area .console-page { padding: 16px 20px; }
+.console-page > .console-panel { flex: 1; min-height: 0; }
+.console-panel { -webkit-app-region: no-drag; }
+.editor-head .editor-actions { flex-wrap: wrap; justify-content: flex-end; }

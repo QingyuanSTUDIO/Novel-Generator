@@ -1,4 +1,5 @@
 import type { AgentOperation, AgentResourceType } from './schema'
+import { agentResourceTemplateFields, strictStandardResourceTypes } from './resourceFieldPolicy.ts'
 
 type ParsedAgentCommand = { message: string; operations: AgentOperation[] }
 type AgentGroupCollection = 'world' | 'characters' | 'items' | 'skills' | 'style'
@@ -129,6 +130,16 @@ function parseKeyValues(text: string) {
   return fields
 }
 
+function completeLocalCreateFields(resourceType: AgentResourceType, fields: Record<string, string>) {
+  if (!strictStandardResourceTypes.includes(resourceType as (typeof strictStandardResourceTypes)[number])) {
+    return { fields: Object.keys(fields).length ? fields : undefined, includeAllFields: undefined }
+  }
+  return {
+    fields: Object.fromEntries(agentResourceTemplateFields[resourceType].map((field) => [field, fields[field] ?? ''])),
+    includeAllFields: true as const,
+  }
+}
+
 function extractTitle(prompt: string, words: string[], fallback: string) {
   const quoted = prompt.match(/[“"「『]([^”"」』]+)[”"」』]/)
   if (quoted?.[1]) return quoted[1].trim()
@@ -187,7 +198,15 @@ export function parseLocalAgentPrompt(prompt: string, activeCollection?: string)
     for (const key of Object.keys(fields)) {
       if (/^(创建|新建|添加|生成|建立)/.test(key)) delete fields[key]
     }
-    const operation: AgentOperation = { action: 'create_resource', resourceType: rule.type, title, summary: summaryMatch?.[1]?.trim(), fields: Object.keys(fields).length ? fields : undefined }
+    const completed = completeLocalCreateFields(rule.type, fields)
+    const operation: AgentOperation = {
+      action: 'create_resource',
+      resourceType: rule.type,
+      title,
+      summary: summaryMatch?.[1]?.trim(),
+      fields: completed.fields,
+      ...(completed.includeAllFields === true ? { includeAllFields: true } : {}),
+    }
     return { message: `已准备创建${rule.label}“${title}”。`, operations: [operation] }
   }
 

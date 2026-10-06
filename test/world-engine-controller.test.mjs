@@ -138,6 +138,94 @@ test('runs a local proposal and records confirmation through the controller', as
   assert.equal(persistCount(), 2)
 })
 
+test('approving a non-clock proposal does not implicitly advance narrative time', () => {
+  const { store, controller } = createController()
+  controller.updateTimeSpan('day')
+  const beforeClock = JSON.parse(JSON.stringify(store.value.worldEngine.clock))
+  store.value.worldEngine.pendingProposals.push({
+    id: 'proposal-no-clock',
+    status: 'pending',
+    reasoning: '只确认一项事件，不改变叙事时间。',
+    createdAt: Date.now(),
+    changes: [{
+      id: 'change-no-clock',
+      kind: 'event',
+      targetId: 'event-no-clock',
+      summary: '记录码头巡查',
+      patch: { kind: 'action', title: '码头巡查', status: 'planned' },
+      evidence: ['当前章节'],
+    }],
+  })
+
+  controller.approveProposal('proposal-no-clock')
+
+  assert.equal(JSON.stringify(store.value.worldEngine.clock), JSON.stringify(beforeClock))
+  assert.equal(store.value.worldEngine.events[0].id, 'event-no-clock')
+})
+
+test('approving an explicit clock proposal advances time exactly once', () => {
+  const { store, controller } = createController()
+  controller.updateTimeSpan('day')
+  const beforeRevision = store.value.worldEngine.clock.revision
+  store.value.worldEngine.pendingProposals.push({
+    id: 'proposal-clock',
+    status: 'pending',
+    reasoning: '确认进入下一天。',
+    createdAt: Date.now(),
+    changes: [{
+      id: 'change-clock',
+      kind: 'clock',
+      targetId: 'clock',
+      summary: '推进一天',
+      patch: { targetTime: '第二天清晨', reason: '本章结束后进入下一天。' },
+      evidence: ['当前章节'],
+    }],
+  })
+
+  controller.approveProposal('proposal-clock')
+
+  assert.equal(store.value.worldEngine.clock.currentTime, '第二天清晨')
+  assert.equal(store.value.worldEngine.clock.previousTime, '未设定')
+  assert.equal(store.value.worldEngine.clock.revision, beforeRevision + 1)
+})
+
+test('partial proposal approval keeps unselected changes pending', () => {
+  const { store, controller } = createController()
+  store.value.worldEngine.pendingProposals.push({
+    id: 'proposal-partial',
+    status: 'pending',
+    reasoning: '分别确认后台行动和时间推进。',
+    createdAt: Date.now(),
+    changes: [
+      {
+        id: 'change-event',
+        kind: 'event',
+        targetId: 'event-partial',
+        summary: '记录后台行动',
+        patch: { kind: 'action', title: '后台行动', status: 'planned' },
+        evidence: ['当前章节'],
+      },
+      {
+        id: 'change-clock',
+        kind: 'clock',
+        targetId: 'clock',
+        summary: '推进一天',
+        patch: { targetTime: '第二天', reason: '章节结束。' },
+        evidence: ['当前章节'],
+      },
+    ],
+  })
+
+  controller.approveProposal('proposal-partial', ['change-event'])
+
+  const proposal = store.value.worldEngine.pendingProposals[0]
+  assert.equal(proposal.status, 'pending')
+  assert.deepEqual(proposal.changes.map((change) => change.id), ['change-clock'])
+  assert.equal(store.value.worldEngine.events[0].id, 'event-partial')
+  assert.equal(store.value.worldEngine.clock.currentTime, '未设定')
+  assert.equal(store.value.worldEngine.status, 'awaiting-review')
+})
+
 test('does not apply relationships involving a route character', () => {
   const { store, controller } = createController()
   store.value.characters.push({

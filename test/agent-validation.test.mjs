@@ -1,16 +1,33 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { validateAgentResponse } from '../src/agent/validation.ts'
+import { agentResourceTemplateFields } from '../src/agent/resourceFieldPolicy.ts'
+
+const completeFields = (resourceType, values = {}) => Object.fromEntries(
+  agentResourceTemplateFields[resourceType].map((field) => [
+    field,
+    values[field] ?? (
+      resourceType === 'character' && field === '角色身份'
+        ? '配角'
+        : resourceType === 'skill' && field === '技能性质'
+          ? '主动'
+          : ''
+    ),
+  ]),
+)
+const createCard = (resourceType, title, values = {}, extra = {}) => ({
+  action: 'create_resource',
+  resourceType,
+  title,
+  fields: completeFields(resourceType, values),
+  includeAllFields: true,
+  ...extra,
+})
 
 test('accepts valid card operations and a no-change response', () => {
   assert.equal(validateAgentResponse({
     message: '已准备角色卡',
-    operations: [{
-      action: 'create_resource',
-      resourceType: 'character',
-      title: '青源',
-      fields: { 角色身份: '配角', 性别: '女' },
-    }],
+    operations: [createCard('character', '青源', { 角色身份: '配角', 性别: '女' })],
   }).ok, true)
   assert.deepEqual(validateAgentResponse({ message: '这是建议', operations: [] }), {
     ok: true,
@@ -21,15 +38,15 @@ test('accepts valid card operations and a no-change response', () => {
 test('rejects the whole response when an operation has an invalid enum or extra field', () => {
   const invalidRole = validateAgentResponse({
     message: '创建角色',
-    operations: [{ action: 'create_resource', resourceType: 'character', title: '青源', fields: { 角色身份: '重要人物' } }],
+    operations: [createCard('character', '青源', { 角色身份: '重要人物' })],
   })
   assert.equal(invalidRole.ok, false)
 
   const extraProperty = validateAgentResponse({
     message: '创建角色',
     operations: [
-      { action: 'create_resource', resourceType: 'character', title: '青源' },
-      { action: 'create_resource', resourceType: 'item', title: '钥匙', overwriteAll: true },
+      createCard('character', '青源'),
+      { ...createCard('item', '钥匙'), overwriteAll: true },
     ],
   })
   assert.equal(extraProperty.ok, false)
@@ -54,10 +71,9 @@ test('keeps independent custom structures out of standard world-book resources',
   const result = validateAgentResponse({
     message: '创建势力卡',
     operations: [{
-      action: 'create_resource',
-      resourceType: 'world',
-      title: '天玄宗',
+      ...createCard('world', '天玄宗'),
       fields: {
+        ...completeFields('world'),
         世界定义: '修仙宗门',
         世界层级: '五级',
         登记规模: '大型',
@@ -99,16 +115,13 @@ test('accepts the English aliases used by common model JSON for standard cards',
   const result = validateAgentResponse({
     message: '创建全局世界书',
     operations: [{
-      action: 'create_resource',
-      resourceType: 'world',
-      title: '天玄宗',
-      fields: {
+      ...createCard('world', '天玄宗', {
         triggerStrategy: 'always',
         triggerKeys: '天玄宗, 宗门',
         content: '一个隐世宗门。',
         scope: '全书',
         status: '稳定',
-      },
+      }),
     }],
   })
   assert.equal(result.ok, true)
@@ -140,6 +153,72 @@ test('accepts review status changes but rejects invalid values and agent-control
   }
 })
 
+test('allows explicit empty summaries and fields but rejects an empty update title', () => {
+  const cleared = validateAgentResponse({
+    message: '清空资料',
+    operations: [{
+      action: 'update_resource',
+      resourceType: 'character',
+      target: '青源',
+      summary: '',
+      fields: { 性格: '', triggerKeys: '' },
+    }],
+  })
+  assert.equal(cleared.ok, true)
+
+  const emptyTitle = validateAgentResponse({
+    message: '清空名称',
+    operations: [{
+      action: 'update_resource',
+      resourceType: 'character',
+      target: '青源',
+      title: '',
+    }],
+  })
+  assert.equal(emptyTitle.ok, false)
+  if (!emptyTitle.ok) assert.match(emptyTitle.error, /title.*非空字符串/)
+})
+
+test('rejects new non-template fields when updating a standard card', () => {
+  const result = validateAgentResponse({
+    message: '扩展角色结构',
+    operations: [{
+      action: 'update_resource',
+      resourceType: 'character',
+      target: '青源',
+      fields: { '人物战力等级': '五境' },
+    }],
+  })
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.match(result.error, /标准卡更新不能借用旧条目的未知字段/)
+})
+
+test('accepts outline metadata in create and update operations', () => {
+  const result = validateAgentResponse({
+    message: '整理大纲',
+    operations: [
+      {
+        action: 'create_resource',
+        resourceType: 'outline',
+        title: '第一卷',
+        outlineType: 'volume',
+        outlineCollapsed: true,
+      },
+      {
+        action: 'update_resource',
+        resourceType: 'outline',
+        target: 'outline-1',
+        outlineType: 'chapterRange',
+        outlineParentId: 'outline-volume',
+        outlineStartChapterId: 'ch-1',
+        outlineEndChapterId: 'ch-8',
+        outlineCollapsed: false,
+      },
+    ],
+  })
+  assert.equal(result.ok, true)
+})
+
 test('rejects group targets for resources without foldable collections', () => {
   const invalidGroupTarget = validateAgentResponse({
     message: '创建大纲',
@@ -150,7 +229,7 @@ test('rejects group targets for resources without foldable collections', () => {
 
   assert.equal(validateAgentResponse({
     message: '创建角色',
-    operations: [{ action: 'create_resource', resourceType: 'character', title: '青源', groupTarget: '主角组' }],
+    operations: [createCard('character', '青源', {}, { groupTarget: '主角组' })],
   }).ok, true)
 })
 
@@ -214,24 +293,14 @@ test('accepts reinforcement instructions on custom-module field definitions', ()
 test('rejects invalid holding references and conflicting operations before execution', () => {
   const blankHolding = validateAgentResponse({
     message: '创建角色',
-    operations: [{
-      action: 'create_resource',
-      resourceType: 'character',
-      title: '青源',
-      holdingItems: [''],
-    }],
+    operations: [createCard('character', '青源', {}, { holdingItems: [''] })],
   })
   assert.equal(blankHolding.ok, false)
   if (!blankHolding.ok) assert.match(blankHolding.error, /不能包含空字符串/)
 
   const itemHolding = validateAgentResponse({
     message: '创建道具',
-    operations: [{
-      action: 'create_resource',
-      resourceType: 'item',
-      title: '铜钥匙',
-      holdingSkills: ['skill-1'],
-    }],
+    operations: [createCard('item', '铜钥匙', {}, { holdingSkills: ['skill-1'] })],
   })
   assert.equal(itemHolding.ok, false)
   if (!itemHolding.ok) assert.match(itemHolding.error, /只有角色资源/)

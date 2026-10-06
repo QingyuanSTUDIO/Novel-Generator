@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { normalizeOutlineNodes } from '../src/data/outline.ts'
+import { normalizeOutlineNodes, outlineDescendantIds, removeOutlineNode } from '../src/data/outline.ts'
 
 function node(id, extra = {}) {
   return {
@@ -75,4 +75,52 @@ test('preserves valid outline fields and does not mutate the input', () => {
 
   assert.deepEqual(nodes, before)
   assert.deepEqual(normalized[0], nodes[0])
+})
+
+test('promotes direct outline children without leaving a dangling parent', () => {
+  const nodes = [
+    node('book', { outlineType: 'book' }),
+    node('volume', { outlineType: 'volume', outlineParentId: 'book' }),
+    node('range', { outlineType: 'chapterRange', outlineParentId: 'volume' }),
+    node('scene', { outlineType: 'scene', outlineParentId: 'range' }),
+  ]
+
+  assert.deepEqual(outlineDescendantIds(nodes, 'volume'), ['range', 'scene'])
+  const result = removeOutlineNode(nodes, 'volume', 'promote')
+  const byId = new Map(result.nodes.map((entry) => [entry.id, entry]))
+
+  assert.deepEqual(result.removedIds, ['volume'])
+  assert.deepEqual(result.promotedIds, ['range'])
+  assert.equal(byId.get('range').outlineParentId, 'book')
+  assert.equal(byId.get('scene').outlineParentId, 'range')
+  assert.equal(result.nodes.some((entry) => entry.outlineParentId === 'volume'), false)
+})
+
+test('promoting a scene to an incompatible book parent safely makes it a root', () => {
+  const nodes = [
+    node('book', { outlineType: 'book' }),
+    node('range', { outlineType: 'chapterRange', outlineParentId: 'book' }),
+    node('scene', { outlineType: 'scene', outlineParentId: 'range' }),
+  ]
+
+  const result = removeOutlineNode(nodes, 'range', 'promote')
+  const scene = result.nodes.find((entry) => entry.id === 'scene')
+
+  assert.equal(scene.outlineParentId, undefined)
+})
+
+test('cascading outline deletion removes every descendant and preserves input', () => {
+  const nodes = [
+    node('book', { outlineType: 'book' }),
+    node('volume', { outlineType: 'volume', outlineParentId: 'book' }),
+    node('range', { outlineType: 'chapterRange', outlineParentId: 'volume' }),
+    node('scene', { outlineType: 'scene', outlineParentId: 'range' }),
+  ]
+  const before = structuredClone(nodes)
+  const result = removeOutlineNode(nodes, 'volume', 'cascade')
+
+  assert.deepEqual(result.removedIds, ['volume', 'range', 'scene'])
+  assert.deepEqual(result.promotedIds, [])
+  assert.deepEqual(result.nodes.map((entry) => entry.id), ['book'])
+  assert.deepEqual(nodes, before)
 })

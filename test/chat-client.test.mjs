@@ -280,6 +280,32 @@ test('client normalizes explicit generation values, preserves zero and omits bla
   assert.equal(bodies[1].includeUsage, false)
 })
 
+test('client removes native-provider selectors that are not part of the upstream request', async (t) => {
+  const bodies = []
+  const localApiUrl = await createClientApi(t, (_req, res, body) => {
+    bodies.push(body)
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, text: '正文。' }))
+  })
+  await requestChat(localApiUrl, {
+    ...request,
+    protocol: 'Anthropic',
+    includeUsage: true,
+    outputTokenParameter: 'max_completion_tokens',
+    responseFormat: 'json_object',
+  })
+  assert.equal('includeUsage' in bodies[0], false)
+  assert.equal('outputTokenParameter' in bodies[0], false)
+  assert.equal('responseFormat' in bodies[0], false)
+  await requestChat(localApiUrl, {
+    ...request,
+    protocol: 'OpenAI Compatible',
+    stream: false,
+    includeUsage: true,
+  })
+  assert.equal('includeUsage' in bodies[1], false)
+})
+
 test('client rejects invalid explicit parameters before contacting the local proxy', async (t) => {
   let called = 0
   const localApiUrl = await createClientApi(t, (_req, res) => {

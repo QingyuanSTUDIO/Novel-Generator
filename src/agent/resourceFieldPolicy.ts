@@ -116,6 +116,28 @@ export const agentResourceTemplateFields: Record<AgentResourceType, readonly str
 }
 
 /**
+ * Built-in cards have a stable author-facing contract.  A create operation
+ * must carry every field in these templates, even when a field is currently
+ * unknown and is therefore represented by an empty string.  Keep this list
+ * separate from `agentResourceTemplateFields`: outline/world-engine/style
+ * operations have historically supported their own partial creation flows,
+ * while these four card types are the user-visible standard-card protocol.
+ */
+export const strictStandardResourceTypes = ['world', 'character', 'item', 'skill'] as const satisfies readonly AgentResourceType[]
+
+export type StrictStandardResourceType = (typeof strictStandardResourceTypes)[number]
+
+export function missingAgentResourceTemplateFields(
+  resourceType: AgentResourceType,
+  fields: Record<string, unknown> | undefined,
+): string[] {
+  if (!strictStandardResourceTypes.includes(resourceType as StrictStandardResourceType)) return []
+  const source = fields ?? {}
+  return agentResourceTemplateFields[resourceType]
+    .filter((field) => !Object.prototype.hasOwnProperty.call(source, field))
+}
+
+/**
  * The UI uses Chinese field labels, while a model will often return a
  * camelCase JSON shape even when the rest of the operation follows the
  * documented protocol. Keep this compatibility layer deliberately explicit:

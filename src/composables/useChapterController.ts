@@ -17,10 +17,15 @@ type ChapterControllerOptions = {
   castDraft: Ref<string>
   closeParagraphEdit: () => void
   persist: () => void
+  /** Optional shared history hooks supplied by the desktop App. */
+  beginManualHistory?: () => unknown
+  commitManualHistory?: (summary: string, checkpoint: unknown) => void
 }
 
 export function useChapterController(options: ChapterControllerOptions) {
   const { store, selectedChapterId, selectedVolumeId, chapterSearch, candidate, chapterDeleteOpen, editorToolsOpen, formatIndentSpaces, copyFeedback, castDraft } = options
+  const beginManualHistory = () => options.beginManualHistory?.() ?? null
+  const commitManualHistory = (summary: string, checkpoint: unknown) => options.commitManualHistory?.(summary, checkpoint)
   const activeChapter = computed(() => store.value.chapters.find((chapter) => chapter.id === selectedChapterId.value) ?? store.value.chapters[0])
   const visibleVolumes = computed<Volume[]>(() => {
     if (store.value.volumes?.length) return store.value.volumes
@@ -87,6 +92,7 @@ export function useChapterController(options: ChapterControllerOptions) {
     if (!chapter) return
     const index = store.value.chapters.findIndex((item) => item.id === chapter.id)
     if (index < 0) return
+    const checkpoint = beginManualHistory()
     store.value.chapters.splice(index, 1)
     if (!store.value.chapters.length) {
       const volumeId = visibleVolumes.value.some((volume) => volume.id === chapter.volumeId) ? chapter.volumeId : visibleVolumes.value[0]?.id
@@ -96,15 +102,18 @@ export function useChapterController(options: ChapterControllerOptions) {
     if (nextChapter) selectChapter(nextChapter.id)
     chapterDeleteOpen.value = false
     candidate.value = ''
+    commitManualHistory(`手动删除章节${chapter.title || ''}`, checkpoint)
     options.persist()
   }
 
   function updateChapterContent(value: string) {
     const chapter = activeChapter.value
-    if (!chapter) return
+    if (!chapter || chapter.content === value) return
+    const checkpoint = beginManualHistory()
     chapter.content = value
     chapter.wordCount = value.replace(/\s/g, '').length
     chapter.status = '草稿'
+    commitManualHistory(`手动修改章节${chapter.title || ''}正文`, checkpoint)
   }
 
   function formatChapterContent() {
@@ -162,7 +171,10 @@ export function useChapterController(options: ChapterControllerOptions) {
   }
 
   function updateVolumeTitle(volume: Volume, value: string) {
+    if (volume.title === value) return
+    const checkpoint = beginManualHistory()
     volume.title = value
+    commitManualHistory(`手动修改分卷${volume.title || ''}名称`, checkpoint)
   }
 
   function updateChapterTitle(value: string) {
@@ -170,7 +182,11 @@ export function useChapterController(options: ChapterControllerOptions) {
     if (!chapter) return
     const prefix = chapter.title.match(/^(\d+)(?:\s+|$)/)?.[1]
     const title = value.replace(/^\s+/, '')
-    chapter.title = prefix ? (title ? `${prefix} ${title}` : prefix) : title
+    const nextTitle = prefix ? (title ? `${prefix} ${title}` : prefix) : title
+    if (chapter.title === nextTitle) return
+    const checkpoint = beginManualHistory()
+    chapter.title = nextTitle
+    commitManualHistory(`手动修改章节${chapter.title || ''}标题`, checkpoint)
   }
 
   function chapterDisplayTitle(chapter: Chapter | undefined) {
@@ -194,32 +210,51 @@ export function useChapterController(options: ChapterControllerOptions) {
     if (!targetVolume) return
     const number = nextChapterNumber()
     const id = `ch-${Date.now()}`
+    const checkpoint = beginManualHistory()
     store.value.chapters.push({ id, title: chapterTitleForNumber(number), status: '草稿', content: '', wordCount: 0, volumeId: targetVolume.id })
     targetVolume.collapsed = false
     selectedChapterId.value = id
     chapterSearch.value = ''
     candidate.value = ''
+    commitManualHistory(`手动创建章节${chapterTitleForNumber(number)}`, checkpoint)
     options.persist()
   }
 
   function createVolume() {
     const volume: Volume = { id: `volume-${Date.now()}`, title: '', collapsed: false }
+    const checkpoint = beginManualHistory()
     store.value.volumes.push(volume)
     selectedVolumeId.value = volume.id
     chapterSearch.value = ''
+    commitManualHistory('手动创建分卷', checkpoint)
     options.persist()
   }
 
   function updateChapterTaskGoal(value: string) {
-    if (activeChapter.value) activeChapter.value.taskGoal = value
+    const chapter = activeChapter.value
+    if (!chapter || chapter.taskGoal === value) return
+    const checkpoint = beginManualHistory()
+    chapter.taskGoal = value
+    commitManualHistory(`手动修改章节${chapter.title || ''}任务目标`, checkpoint)
   }
 
   function addChapterCast(value: string) {
     const chapter = activeChapter.value
     if (!chapter) return
     const incoming = value.split(/[\s,，、;；|｜/]+/g).map((name) => name.trim()).filter(Boolean)
-    if (incoming.length) chapter.cast = [...new Set([...(chapter.cast ?? []), ...incoming])]
+    if (!incoming.length) {
+      castDraft.value = ''
+      return
+    }
+    const next = [...new Set([...(chapter.cast ?? []), ...incoming])]
+    if (next.length === (chapter.cast ?? []).length) {
+      castDraft.value = ''
+      return
+    }
+    const checkpoint = beginManualHistory()
+    chapter.cast = next
     castDraft.value = ''
+    commitManualHistory(`手动修改章节${chapter.title || ''}出场人物`, checkpoint)
   }
 
   function commitChapterCast(event: KeyboardEvent) {
@@ -229,8 +264,11 @@ export function useChapterController(options: ChapterControllerOptions) {
   }
 
   function removeChapterCast(name: string) {
-    if (!activeChapter.value) return
-    activeChapter.value.cast = (activeChapter.value.cast ?? []).filter((item) => item !== name)
+    const chapter = activeChapter.value
+    if (!chapter || !(chapter.cast ?? []).includes(name)) return
+    const checkpoint = beginManualHistory()
+    chapter.cast = (chapter.cast ?? []).filter((item) => item !== name)
+    commitManualHistory(`手动修改章节${chapter.title || ''}出场人物`, checkpoint)
   }
 
   return {

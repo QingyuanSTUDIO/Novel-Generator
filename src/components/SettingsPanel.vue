@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Archive, Bot, Check, Cloud, FileText, LockKeyhole, Palette, Plug, Plus, RotateCcw, Timer, Trash2, X } from 'lucide-vue-next'
+import { Archive, Bot, Check, Cloud, FileText, LockKeyhole, Palette, Plug, Plus, RotateCcw, Server, Timer, Trash2, X } from 'lucide-vue-next'
 import ProviderGenerationSettings from './ProviderGenerationSettings.vue'
+import McpSettings from './McpSettings.vue'
+import PortfolioFileSettings from './PortfolioFileSettings.vue'
 import { themeColorFields } from '../data/theme'
 import type { ThemeColorKey, ThemeSettings } from '../data/theme'
 import type { AgentConversation } from '../types'
@@ -31,6 +33,11 @@ const props = defineProps<{
   historyLimit: number
   autoSaveSeconds: number
   qyBackupCount: number
+  qyFilePath?: string
+  qyRestoreBusy?: boolean
+  qyRestoreError?: string
+  qyRestoreMessage?: string
+  qyRestoredPath?: string
   themeSettings: ThemeSettings
   archivedConversations: AgentConversation[]
 }>()
@@ -49,6 +56,8 @@ const emit = defineEmits<{
   updateHistoryLimit: [value: number]
   updateAutoSave: [value: number]
   updateQyBackupCount: [value: number]
+  restoreQyBackup: [id: string]
+  openRestoredQyBackup: [path: string]
   updateThemeColor: [mode: 'light' | 'dark', key: ThemeColorKey, value: string]
   resetTheme: []
   restoreConversation: [id: string]
@@ -56,7 +65,7 @@ const emit = defineEmits<{
 }>()
 
 const overlayPointerDownTarget = ref<EventTarget | null>(null)
-const activeTab = ref<'api' | 'agent' | 'archive' | 'autosave' | 'theme' | 'files'>('api')
+const activeTab = ref<'api' | 'mcp' | 'agent' | 'archive' | 'autosave' | 'theme' | 'files'>('api')
 
 function rememberOverlayPointerDown(event: PointerEvent) {
   overlayPointerDownTarget.value = event.target
@@ -96,6 +105,7 @@ function conversationPreview(conversation: AgentConversation) {
 
         <nav class="settings-nav" aria-label="设置分类">
           <button :class="['settings-nav-item', { selected: activeTab === 'api' }]" type="button" @click="activeTab = 'api'"><Plug :size="16" /><span>API 设置</span><small>连接与模型</small></button>
+          <button :class="['settings-nav-item', { selected: activeTab === 'mcp' }]" type="button" @click="activeTab = 'mcp'"><Server :size="16" /><span>MCP 连接</span><small>本机客户端</small></button>
           <button :class="['settings-nav-item', { selected: activeTab === 'agent' }]" type="button" @click="activeTab = 'agent'"><Bot class="settings-agent-icon" :size="16" /><span>Agent 设置</span><small>记录与撤销</small></button>
           <button :class="['settings-nav-item', { selected: activeTab === 'archive' }]" type="button" @click="activeTab = 'archive'"><Archive :size="16" /><span>归档对话</span><small>恢复与删除</small></button>
           <button :class="['settings-nav-item', { selected: activeTab === 'autosave' }]" type="button" @click="activeTab = 'autosave'"><Timer :size="16" /><span>自动保存</span><small>保存间隔</small></button>
@@ -104,6 +114,7 @@ function conversationPreview(conversation: AgentConversation) {
         </nav>
 
         <div class="settings-body" :class="{ 'settings-body-api': activeTab === 'api' }">
+          <McpSettings v-show="activeTab === 'mcp'" />
           <div v-if="activeTab === 'agent'" class="settings-section-head agent-settings-section">
             <div>
               <span class="eyebrow">Agent 记录</span>
@@ -127,19 +138,15 @@ function conversationPreview(conversation: AgentConversation) {
             <div class="source-note"><FileText :size="15" /><span>保存内容包含当前作品、全局 API 配置、模型列表和 Agent 修改记录。</span></div>
           </div>
 
-          <div v-if="activeTab === 'files'" class="settings-section-head agent-settings-section">
-            <div>
-              <span class="eyebrow">作品文件</span>
-              <h3>备份与迁移</h3>
-              <p>.qy 文件只保存小说内容和创作资料，不包含 API、主题和其他软件设置。</p>
-            </div>
-            <label class="form-field settings-history-limit"><span>保留备份数量</span><select :value="props.qyBackupCount" @change="emit('updateQyBackupCount', Number(($event.target as HTMLSelectElement).value))"><option :value="0">不保留备份</option><option :value="3">最近 3 个</option><option :value="5">最近 5 个</option><option :value="10">最近 10 个</option><option :value="20">最近 20 个</option><option :value="50">最近 50 个</option></select></label>
-          </div>
-
-          <div v-if="activeTab === 'files'" class="agent-settings-info">
-            <div class="source-note"><FileText :size="15" /><span>文件菜单提供新建、打开、保存和另存为；最近打开过的 .qy 文件会保留在历史列表中。</span></div>
-            <div class="source-note"><Archive :size="15" /><span>保存已有文件前会把旧版本放入应用数据目录的“备份”文件夹，超过数量后自动删除最旧备份。</span></div>
-          </div>
+          <PortfolioFileSettings
+            v-if="activeTab === 'files'"
+            :file-path="props.qyFilePath || ''" :backup-count="props.qyBackupCount"
+            :restoring="props.qyRestoreBusy" :restore-error="props.qyRestoreError"
+            :restore-message="props.qyRestoreMessage" :restored-path="props.qyRestoredPath"
+            @update-backup-count="emit('updateQyBackupCount', $event)"
+            @restore-backup="emit('restoreQyBackup', $event)"
+            @open-restored-backup="emit('openRestoredQyBackup', $event)"
+          />
 
           <section v-if="activeTab === 'theme'" class="theme-settings">
             <div class="settings-section-head theme-settings-head">
@@ -189,9 +196,9 @@ function conversationPreview(conversation: AgentConversation) {
             </div>
 
             <article v-if="props.selectedResource" class="settings-detail">
-              <div class="settings-detail-head">
+                <div class="settings-detail-head">
                 <div><span class="eyebrow">API 预设 · 可编辑</span><h3>{{ props.selectedResource.title }}</h3></div>
-                <div class="detail-actions"><button class="button primary" type="button" :disabled="props.providerTest === '保存中'" @click="emit('save')"><Check :size="15" />{{ props.providerTest === '保存中' ? '验证中…' : props.providerTest === '已保存' ? '已保存' : '保存配置' }}</button><button class="button secondary" type="button" :disabled="props.providerTest === '测试中' || props.providerTest === '保存中'" @click="emit('test')"><Plug :size="15" />{{ props.providerTest === '测试中' ? '测试中…' : '测试连接' }}</button><button class="icon-button danger" type="button" title="删除 API 预设" aria-label="删除 API 预设" @click="emit('remove')"><Trash2 :size="16" /></button></div>
+                <div class="detail-actions"><button class="button primary" type="button" :disabled="props.providerTest === '保存中'" @click="emit('save')"><Check :size="15" />{{ props.providerTest === '保存中' ? '保存中…' : props.providerTest === '已保存' ? '已保存' : '保存配置' }}</button><button class="button secondary" type="button" :disabled="props.providerTest === '测试中' || props.providerTest === '保存中'" @click="emit('test')"><Plug :size="15" />{{ props.providerTest === '测试中' ? '测试中…' : '测试连接' }}</button><button class="icon-button danger" type="button" title="删除 API 预设" aria-label="删除 API 预设" @click="emit('remove')"><Trash2 :size="16" /></button></div>
               </div>
 
               <label class="form-field"><span>预设名称</span><input :value="props.selectedResource.title" @input="(event) => (props.selectedResource!.title = (event.target as HTMLInputElement).value)" /></label>
@@ -199,7 +206,7 @@ function conversationPreview(conversation: AgentConversation) {
 
               <div class="api-form-grid">
                 <label class="form-field"><span>协议</span><select :value="props.selectedResource.fields['协议']" @change="emit('updateField', '协议', ($event.target as HTMLSelectElement).value)"><option v-for="protocol in props.protocolOptions" :key="protocol" :value="protocol">{{ protocol }}</option></select></label>
-                <label class="form-field"><span>模型</span><div class="model-row"><select :value="props.selectedResource.fields['模型']" @change="emit('updateField', '模型', ($event.target as HTMLSelectElement).value)"><option value="" disabled>请先获取模型</option><option v-for="model in modelsFor(props.selectedResource)" :key="model" :value="model">{{ model }}</option></select><button class="button secondary fetch-button" type="button" :disabled="props.providerTest === '拉取中'" @click="emit('fetch')"><Cloud :size="15" />{{ props.providerTest === '拉取中' ? '拉取中…' : '获取模型' }}</button></div><small v-if="props.providerTest === '模型已更新'" class="form-success"><Check :size="12" />模型列表已更新</small></label>
+                <label class="form-field"><span>模型</span><div class="model-row"><select v-if="modelsFor(props.selectedResource).length" :value="props.selectedResource.fields['模型']" @change="emit('updateField', '模型', ($event.target as HTMLSelectElement).value)"><option value="" disabled>请选择模型</option><option v-for="model in modelsFor(props.selectedResource)" :key="model" :value="model">{{ model }}</option></select><input v-else :value="props.selectedResource.fields['模型']" placeholder="暂未提供模型列表，可手动填写" @input="emit('updateField', '模型', ($event.target as HTMLInputElement).value)" /><button class="button secondary fetch-button" type="button" :disabled="props.providerTest === '拉取中'" @click="emit('fetch')"><Cloud :size="15" />{{ props.providerTest === '拉取中' ? '拉取中…' : '获取模型' }}</button></div><small v-if="!modelsFor(props.selectedResource).length" class="form-hint">部分中转站不提供模型列表，手动填写模型名称后可以直接保存。</small><small v-if="props.providerTest === '模型已更新'" class="form-success"><Check :size="12" />模型列表已更新</small></label>
               </div>
 
               <label class="form-field"><span>接口地址</span><input :value="props.selectedResource.fields['接口地址']" placeholder="https://api.example.com/v1" @input="emit('updateField', '接口地址', ($event.target as HTMLInputElement).value)" /></label>

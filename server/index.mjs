@@ -1,4 +1,5 @@
 import http from 'node:http'
+import { randomBytes, timingSafeEqual } from 'node:crypto'
 import https from 'node:https'
 import tls from 'node:tls'
 import fs from 'node:fs/promises'
@@ -12,7 +13,51 @@ const HOST = process.env.NOVEL_PROXY_HOST || '127.0.0.1'
 const PORT = Number(process.env.NOVEL_PROXY_PORT || 3100)
 const STORAGE_PATH = process.env.NOVEL_STORAGE_PATH || path.resolve(process.cwd(), 'data', 'novel-generator-state.json')
 const MAX_REQUEST_BYTES = 8 * 1024 * 1024
+// Keep profile state below the existing request boundary. The warning is
+// deliberately lower and non-blocking so normal saves continue unchanged,
+// while oversized profiles receive a useful breakdown before disk I/O.
+const PROFILE_WARNING_BYTES = 6 * 1024 * 1024
+const PROFILE_MAX_BYTES = MAX_REQUEST_BYTES
 const CHAT_IDLE_TIMEOUT_MS = 180000
+
+function formatBytes(bytes) {
+  const value = Math.max(0, Number(bytes) || 0)
+  if (value < 1024) return `${Math.round(value)} B`
+  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KiB`
+  if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MiB`
+  return `${(value / 1024 ** 3).toFixed(2)} GiB`
+}
+
+function estimateProfileSize(value) {
+  const serialized = JSON.stringify(value)
+  const bytes = Buffer.byteLength(serialized || '', 'utf8')
+  const breakdown = value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.entries(value)
+      .map(([key, child]) => ({
+        key,
+        bytes: Buffer.byteLength(JSON.stringify(child) || '', 'utf8'),
+      }))
+      .sort((left, right) => right.bytes - left.bytes)
+    : []
+  const top = breakdown
+    .filter((item) => item.bytes > 0)
+    .slice(0, 3)
+    .map((item) => `${item.key} ${formatBytes(item.bytes)}`)
+    .join('、')
+  return {
+    bytes,
+    breakdown,
+    description: `本机设置数据约 ${formatBytes(bytes)}${top ? `；主要占用：${top}` : ''}`,
+  }
+}
+
+function profileSizeLimitError(report, maxBytes = PROFILE_MAX_BYTES) {
+  const error = new Error(`${report.description}，超过 profile 保存上限 ${formatBytes(maxBytes)}，已停止写入。`)
+  error.code = 'PROFILE_STATE_TOO_LARGE'
+  error.statusCode = 413
+  error.stateSize = report
+  return error
+}
 
 /** Remove only this request's credential, including URL-encoded echoes. */
 function redactApiKey(message, apiKey) {
@@ -54,6 +99,61 @@ function json(res, status, body) {
     'access-control-allow-methods': 'GET, PUT, POST, OPTIONS',
   })
   res.end(payload)
+}
+
+/**
+ * Profile storage is a separate trust boundary from the development proxy.
+ * The browser preview intentionally keeps its historical unauthenticated
+ * behaviour, while the desktop process passes a per-launch bearer token and
+ * a small Origin allow-list.  Keep this helper local to /api/storage so a
+ * preview client cannot accidentally be required to know a desktop secret.
+ */
+function profileCorsHeaders(req, { requireAuth, allowedOrigins }) {
+  if (!requireAuth) {
+    return {
+      'access-control-allow-origin': '*',
+      'access-control-allow-headers': 'content-type, authorization',
+      'access-control-allow-methods': 'GET, PUT, OPTIONS',
+    }
+  }
+  const origin = typeof req?.headers?.origin === 'string' ? req.headers.origin.trim() : ''
+  const allowed = !origin || allowedOrigins.has(origin)
+  if (!allowed) return null
+  return {
+    ...(origin ? { 'access-control-allow-origin': origin, vary: 'Origin' } : {}),
+    'access-control-allow-headers': 'content-type, authorization',
+    'access-control-allow-methods': 'GET, PUT, OPTIONS',
+  }
+}
+
+function profileJson(req, res, status, body, authOptions) {
+  const headers = profileCorsHeaders(req, authOptions)
+  if (!headers) {
+    res.writeHead(403, { 'content-type': 'application/json; charset=utf-8' })
+    res.end(JSON.stringify({ ok: false, error: '请求来源未获本机 profile 服务授权' }))
+    return
+  }
+  const payload = JSON.stringify(body)
+  res.writeHead(status, {
+    ...headers,
+    'content-type': 'application/json; charset=utf-8',
+    'content-length': Buffer.byteLength(payload),
+  })
+  res.end(payload)
+}
+
+function profileRequestAuthorized(req, authOptions) {
+  const headers = profileCorsHeaders(req, authOptions)
+  if (!headers) return { ok: false, status: 403, error: '请求来源未获本机 profile 服务授权' }
+  if (!authOptions.requireAuth) return { ok: true }
+  const authorization = typeof req?.headers?.authorization === 'string' ? req.headers.authorization : ''
+  if (!authorization.startsWith('Bearer ')) return { ok: false, status: 401, error: '缺少本机 profile 服务令牌' }
+  const supplied = Buffer.from(authorization.slice(7).trim(), 'utf8')
+  const expected = Buffer.from(authOptions.token, 'utf8')
+  if (!supplied.length || supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+    return { ok: false, status: 401, error: '本机 profile 服务令牌无效' }
+  }
+  return { ok: true }
 }
 
 async function readStorage(storagePath) {
@@ -947,10 +1047,49 @@ async function handleStreamingChat(res, input, externalSignal, idleTimeoutMs) {
   }
 }
 
-export function createLocalApiServer({ host = HOST, port = PORT, storagePath = STORAGE_PATH, chatIdleTimeoutMs = CHAT_IDLE_TIMEOUT_MS } = {}) {
+export function createLocalApiServer({
+  host = HOST,
+  port = PORT,
+  storagePath = STORAGE_PATH,
+  chatIdleTimeoutMs = CHAT_IDLE_TIMEOUT_MS,
+  profileWarningBytes = PROFILE_WARNING_BYTES,
+  profileMaxBytes = PROFILE_MAX_BYTES,
+  profileAuthToken = '',
+  profileAllowedOrigins = [],
+  requireProfileAuth = Boolean(String(profileAuthToken || '').trim()),
+} = {}) {
+  const profileToken = requireProfileAuth
+    ? String(profileAuthToken || '').trim() || randomBytes(32).toString('base64url')
+    : ''
+  const profileAuth = {
+    requireAuth: requireProfileAuth,
+    token: profileToken,
+    allowedOrigins: new Set((Array.isArray(profileAllowedOrigins) ? profileAllowedOrigins : [])
+      .map((origin) => String(origin || '').trim())
+      .filter(Boolean)),
+  }
+  const effectiveProfileWarningBytes = Number.isFinite(Number(profileWarningBytes))
+    ? Math.max(0, Number(profileWarningBytes))
+    : PROFILE_WARNING_BYTES
+  const effectiveProfileMaxBytes = Number.isFinite(Number(profileMaxBytes))
+    ? Math.max(effectiveProfileWarningBytes, Number(profileMaxBytes))
+    : PROFILE_MAX_BYTES
   let writeQueue = Promise.resolve()
   const server = http.createServer(async (req, res) => {
+  const requestUrl = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`)
+  const isProfileStorage = requestUrl.pathname === '/api/storage'
   if (req.method === 'OPTIONS') {
+    if (isProfileStorage && profileAuth.requireAuth) {
+      const headers = profileCorsHeaders(req, profileAuth)
+      if (!headers) {
+        res.writeHead(403, { 'content-type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ ok: false, error: '请求来源未获本机 profile 服务授权' }))
+        return
+      }
+      res.writeHead(204, headers)
+      res.end()
+      return
+    }
     res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'GET, PUT, POST, OPTIONS' })
     res.end()
     return
@@ -959,22 +1098,39 @@ export function createLocalApiServer({ host = HOST, port = PORT, storagePath = S
     json(res, 200, { ok: true })
     return
   }
-  if (req.method === 'GET' && req.url === '/api/storage') {
+  if (req.method === 'GET' && isProfileStorage && requestUrl.search === '') {
+    const authorization = profileRequestAuthorized(req, profileAuth)
+    if (!authorization.ok) {
+      profileJson(req, res, authorization.status, { ok: false, error: authorization.error }, profileAuth)
+      return
+    }
     try {
-      json(res, 200, { ok: true, state: await readStorage(storagePath) })
+      profileJson(req, res, 200, { ok: true, state: await readStorage(storagePath) }, profileAuth)
     } catch (error) {
-      json(res, 500, { ok: false, error: error instanceof Error ? error.message : '读取本地存储失败' })
+      profileJson(req, res, 500, { ok: false, error: error instanceof Error ? error.message : '读取本地存储失败' }, profileAuth)
     }
     return
   }
-  if (req.method === 'PUT' && req.url === '/api/storage') {
+  if (req.method === 'PUT' && isProfileStorage && requestUrl.search === '') {
+    const authorization = profileRequestAuthorized(req, profileAuth)
+    if (!authorization.ok) {
+      profileJson(req, res, authorization.status, { ok: false, error: authorization.error }, profileAuth)
+      return
+    }
     try {
       const body = await readJson(req)
       if (!body || typeof body !== 'object' || !body.state || typeof body.state !== 'object') {
         throw new Error('存储内容格式无效')
       }
+      const profileSize = estimateProfileSize(body.state)
+      if (profileSize.bytes > effectiveProfileMaxBytes) {
+        throw profileSizeLimitError(profileSize, effectiveProfileMaxBytes)
+      }
+      const profileSizeWarning = profileSize.bytes > effectiveProfileWarningBytes
+        ? `${profileSize.description}；已接近 profile 保存上限 ${formatBytes(effectiveProfileMaxBytes)}。`
+        : ''
       if (!Number.isFinite(body.expectedUpdatedAt)) {
-        json(res, 428, { ok: false, error: '缺少存储版本，拒绝覆盖本地数据' })
+        profileJson(req, res, 428, { ok: false, error: '缺少存储版本，拒绝覆盖本地数据' }, profileAuth)
         return
       }
       const write = writeQueue.then(async () => {
@@ -995,12 +1151,21 @@ export function createLocalApiServer({ host = HOST, port = PORT, storagePath = S
       writeQueue = write.then(() => undefined, () => undefined)
       const result = await write
       if (result.conflict) {
-        json(res, 409, { ok: false, conflict: true, updatedAt: result.updatedAt, error: result.error || '本地数据已在其他窗口更新，已阻止旧数据覆盖' })
+        profileJson(req, res, 409, { ok: false, conflict: true, updatedAt: result.updatedAt, error: result.error || '本地数据已在其他窗口更新，已阻止旧数据覆盖' }, profileAuth)
         return
       }
-      json(res, 200, { ok: true, updatedAt: result.updatedAt })
+      profileJson(req, res, 200, {
+        ok: true,
+        updatedAt: result.updatedAt,
+        ...(profileSizeWarning ? { warning: profileSizeWarning } : {}),
+      }, profileAuth)
     } catch (error) {
-      json(res, 400, { ok: false, error: error instanceof Error ? error.message : '写入本地存储失败' })
+      profileJson(req, res, Number.isInteger(error?.statusCode) ? error.statusCode : 400, {
+        ok: false,
+        ...(error?.code ? { code: error.code } : {}),
+        ...(error?.stateSize ? { stateSize: error.stateSize } : {}),
+        error: error instanceof Error ? error.message : '写入本地存储失败',
+      }, profileAuth)
     }
     return
   }
@@ -1021,6 +1186,32 @@ export function createLocalApiServer({ host = HOST, port = PORT, storagePath = S
       try {
         const result = await fetchModelLimits(input, requestUpstream, controller.signal)
         if (!res.destroyed) json(res, 200, { ok: true, ...result })
+      } finally {
+        res.off('close', onDisconnect)
+      }
+      return
+    }
+    if (req.url === '/api/proxy/test') {
+      const controller = new AbortController()
+      const onDisconnect = () => {
+        if (!res.writableEnded) controller.abort(new Error('客户端已取消连接测试。'))
+      }
+      res.once('close', onDisconnect)
+      try {
+        const model = String(input?.model || '').trim()
+        if (!model) throw new Error('请先填写模型')
+        // Connection testing is intentionally independent from /models.
+        // A relay may omit model discovery while still accepting chat
+        // completions, so send a bounded one-token probe to the selected
+        // model and never persist or return its response text.
+        const result = await chatWithUpstream({
+          ...input,
+          model,
+          stream: false,
+          maxTokens: 1,
+          messages: [{ role: 'user', content: '只回复 OK。' }],
+        }, controller.signal, chatIdleTimeoutMs)
+        if (!res.destroyed) json(res, 200, { ok: true, model, tested: true, ...(result.usage ? { usage: result.usage } : {}) })
       } finally {
         res.off('close', onDisconnect)
       }
@@ -1060,6 +1251,9 @@ export function createLocalApiServer({ host = HOST, port = PORT, storagePath = S
     if (!res.destroyed) json(res, 502, { ok: false, error: safeUpstreamError(error, requestInput) })
   }
   })
+  // Main process needs the token only to wire Chromium's network layer. It is
+  // never serialised into a response or exposed through the preload bridge.
+  server.profileAuthToken = profileToken || null
   return server
 }
 

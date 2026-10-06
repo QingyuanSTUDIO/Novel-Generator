@@ -63,7 +63,7 @@ export const seed: Store = {
   ],
   world: [
     { id: 'world-curfew', title: '雾港宵禁', tag: '硬设定 · P70', summary: '钟楼三响后，内港禁止船只出入。', fields: { '触发策略': '关键词', '触发键': '雾港, 水闸, 夜航', '内容': '钟楼第三次报时后，水闸关闭，巡夜人会检查所有栈桥。', '过滤条件': '雾港 AND (夜航 OR 水闸)', '注入位置': '章节约束区 · 顺序 70', '预算 / 强度': '约 96 tokens · 硬设定', '递归': '不可递归；直接命中优先于背景条目' } },
-    { id: 'world-tower', title: '旧钟楼', tag: '递归候选 · P30', summary: '废弃钟室里存放着二十年前的航海记录。', fields: { '触发策略': '关键词', '触发键': '旧钟楼, 钟室, 北港钟楼', '内容': '废弃钟室里存放着二十年前的航海记录，暗格入口藏在停摆的主钟后方。', '作者秘密': '钟室暗格藏有失踪船的航海记录。', '读者揭露': '计划第 12 章；第 8 章不可直接说明。', '递归链': '雾港宵禁 → 旧钟楼 → 失踪船航海记录', '本章资料': '仅提供外观、位置及锁闭状态。' } },
+    { id: 'world-tower', title: '旧钟楼', tag: '递归候选 · P30', summary: '废弃钟室里存放着二十年前的航海记录。', fields: { '触发策略': '关键词', '触发键': '旧钟楼, 钟室, 北港钟楼', '内容': '废弃钟室里存放着二十年前的航海记录，暗格入口藏在停摆的主钟后方。', '作者秘密': '钟室暗格藏有失踪船的航海记录。', '读者揭露': '计划第 12 章；第 8 章不可直接说明。', '递归链': '雾港宵禁 → 旧钟楼 → 失踪船航海记录' } },
   ],
   characters: [
     { id: 'char-shen', title: '沈砚', tag: '主角 · 视角人物', summary: '寻找失踪兄长的修表匠，习惯先观察再追问。', fields: { '触发策略': '关键词', '角色身份': '主角', '性别': '男', '种族': '人类', '性格': '谨慎克制，习惯先观察再追问；面对亲人线索时容易执拗。', '外貌': '', '人物动机': '找到兄长；不愿为线索牵连无辜的人。', '当前状态': '雾港码头 · 左手受伤 · 持有一张伪造船票', '已知信息': '船票是假的；兄长失踪前曾去过钟楼。', '尚未知晓': '失踪船的真实航线、林舟的委托人。', '说话习惯': '追问具体细节，紧张时回答变短。' }, holdingItems: ['item-ticket'], holdingSkills: ['skill-tide'] },
@@ -270,6 +270,21 @@ export function estimateContextCustomModuleTokens(schema: CustomModuleSchema, en
     ...Object.entries(entry.data ?? {}).map(([key, value]) => `${key}: ${contextValueText(value)}`),
   ].filter(Boolean).join('\n'))
   return Math.max(16, estimateTextTokens([...schemaText, ...entryText].join('\n')))
+}
+
+/**
+ * Return the currently enabled prompt footprint for a two-level context
+ * layout. Persisted aggregate tokens are intentionally ignored here: they are
+ * a compatibility/display field and can be stale after a card edit or after
+ * its child items are disabled.
+ */
+export function estimateEnabledContextTokens(groups: Pick<ContextGroup, 'enabled' | 'items'>[]): number {
+  return groups.reduce((sum, group) => {
+    if (group.enabled === false) return sum
+    return sum + (group.items ?? []).reduce((itemSum, item) => (
+      item.enabled === false ? itemSum : itemSum + Math.max(0, Number(item.tokens) || 0)
+    ), 0)
+  }, 0)
 }
 
 /** Keep the second level tied to the current cards while preserving its order and switches. */

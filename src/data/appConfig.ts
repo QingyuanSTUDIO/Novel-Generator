@@ -10,12 +10,13 @@ import {
   ListTree,
   PenLine,
   Sparkles,
+  TerminalSquare,
   Users,
 } from 'lucide-vue-next'
 import { agentResponseSchema } from '../agent/schema'
 import type { Store } from '../types'
 
-export type PageKey = 'writer' | 'world' | 'characters' | 'items' | 'skills' | 'outline' | 'worldEngine' | 'style' | 'context' | 'agent' | 'api' | 'json' | 'custom' | 'memes'
+export type PageKey = 'writer' | 'world' | 'characters' | 'items' | 'skills' | 'outline' | 'worldEngine' | 'style' | 'context' | 'agent' | 'console' | 'api' | 'json' | 'custom' | 'memes'
 
 export const navItems = [
   { key: 'writer', label: '章节写作', icon: PenLine, section: '开始写作' },
@@ -28,12 +29,13 @@ export const navItems = [
   { key: 'outline', label: '故事大纲', icon: ListTree, section: '全局把握' },
   { key: 'worldEngine', label: '世界引擎', icon: Globe, section: '全局把握' },
   { key: 'agent', label: 'AI Agent', icon: Bot, section: 'AI功能' },
+  { key: 'console', label: '创作控制台', icon: TerminalSquare, section: 'AI功能' },
   { key: 'style', label: '文风规则', icon: Feather, section: '全局功能' },
   { key: 'context', label: '上下文编排', icon: LayoutList, section: 'Debug' },
   { key: 'json', label: 'JSON 结构查看器', icon: Code2, section: 'Debug' },
 ] as const
 
-export const pageConfig: Record<Exclude<PageKey, 'writer' | 'context' | 'agent' | 'json' | 'custom' | 'memes'>, { collection: keyof Store; title: string; intro: string }> = {
+export const pageConfig: Record<Exclude<PageKey, 'writer' | 'context' | 'agent' | 'console' | 'json' | 'custom' | 'memes'>, { collection: keyof Store; title: string; intro: string }> = {
   world: { collection: 'world', title: '世界书', intro: '动态条目按触发键、关联和优先级注入本章上下文。' },
   characters: { collection: 'characters', title: '角色卡', intro: '固定档案与随章节变化的状态分开维护。' },
   items: { collection: 'items', title: '道具卡', intro: '让持有人、位置和使用限制有据可查。' },

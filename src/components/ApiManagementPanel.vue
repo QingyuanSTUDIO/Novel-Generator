@@ -115,15 +115,17 @@ function updateField(key: string, event: Event) {
           <label class="form-field">
             <span>模型</span>
             <div class="model-row">
-              <select :value="selectedResource.fields['模型']" @change="updateField('模型', $event)">
-                <option value="" disabled>请先获取模型</option>
+              <select v-if="modelOptions(selectedResource).length" :value="selectedResource.fields['模型']" @change="updateField('模型', $event)">
+                <option value="" disabled>请选择模型</option>
                 <option v-for="model in modelOptions(selectedResource)" :key="model" :value="model">{{ model }}</option>
               </select>
+              <input v-else :value="selectedResource.fields['模型']" placeholder="暂未提供模型列表，可手动填写" @input="updateField('模型', $event)" />
               <button class="button secondary fetch-button" type="button" :disabled="providerTest === '拉取中'" @click="emit('fetch')">
                 <Cloud :size="15" />
                 {{ providerTest === '拉取中' ? '拉取中…' : '获取模型' }}
               </button>
             </div>
+            <small v-if="!modelOptions(selectedResource).length" class="form-hint">部分中转站不提供模型列表，手动填写模型名称后可以直接保存。</small>
             <small v-if="providerTest === '模型已更新'" class="form-success"><Check :size="12" />模型列表已更新</small>
           </label>
         </div>

@@ -926,7 +926,7 @@ html[data-theme-mode] .desktop-titlebar-logo,
   display: block;
   align-self: center;
   margin-right: -5px;
-  transform: translateY(3px);
+  transform: translateY(1px);
 }
 
 html[data-theme-mode] .sidebar-brand-logo,
@@ -934,7 +934,7 @@ html[data-theme-mode] .sidebar-brand-logo,
   display: block;
   align-self: center;
   margin-right: -5px;
-  transform: translateY(3px);
+  transform: translateY(1px);
 }
 
 .settings-nav-item .settings-agent-icon {

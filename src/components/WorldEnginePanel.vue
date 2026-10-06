@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { Activity, BookOpen, CalendarClock, Check, ChevronRight, Clock3, Database, Globe2, GitBranch, ListChecks, LockKeyhole, LockKeyholeOpen, Package, Play, RotateCw, ShieldCheck, TrendingUp, Users } from 'lucide-vue-next'
-import type { Chapter, Resource, WorldEngineState } from '../types'
+import ContextPreviewPanel from './ContextPreviewPanel.vue'
+import type { ContextBudgetReport } from '../api/contextBudget'
+import type { ContextPreviewSnapshot } from '../context/contextPreview'
+import type { Chapter, Resource, WorldEngineChangeProposal, WorldEngineProposal, WorldEngineState } from '../types'
 
 /**
  * The engine state is intentionally structural here. This keeps the panel
@@ -37,6 +40,8 @@ const props = defineProps<{
   providers: Resource[]
   selectedProviderId: string
   busy: boolean
+  contextPreview?: ContextPreviewSnapshot | null
+  contextBudget?: ContextBudgetReport | null
 }>()
 
 const emit = defineEmits<{
@@ -48,7 +53,7 @@ const emit = defineEmits<{
   toggleEventReviewStatusLock: [id: string, locked: boolean]
   toggleEventLockAll: [id: string, locked: boolean]
   selectProvider: [id: string]
-  approveProposal: [id: string]
+  approveProposal: [id: string, selectedChangeIds?: string[]]
   rejectProposal: [id: string]
 }>()
 
@@ -90,6 +95,7 @@ const events = computed(() => Array.isArray(engine.value.events) ? engine.value.
 const timeline = computed(() => Array.isArray(engine.value.timeline) ? engine.value.timeline : [])
 const proposals = computed(() => Array.isArray(engine.value.pendingProposals) ? engine.value.pendingProposals.filter((proposal) => proposal.status === 'pending') : [])
 const logs = computed(() => Array.isArray(engine.value.logs) ? engine.value.logs : [])
+const selectedProposalChanges = ref<Record<string, string[]>>({})
 
 const situationEvents = computed(() => events.value.filter((event) => event.kind === 'trend' || event.kind === 'consequence'))
 const incidentEvents = computed(() => events.value.filter((event) => event.kind === 'event' || event.kind === 'action' || event.kind === 'discovery'))
@@ -108,6 +114,30 @@ watch(
   ([mode, days]) => {
     timeAdvanceMode.value = mode
     if (days) customDays.value = days
+  },
+  { immediate: true },
+)
+
+watch(
+  () => proposals.value.map((proposal) => `${proposal.id}:${proposal.changes.map((change) => change.id).join(',')}`),
+  () => {
+    const activeIds = new Set(proposals.value.map((proposal) => proposal.id))
+    for (const id of Object.keys(selectedProposalChanges.value)) {
+      if (!activeIds.has(id)) delete selectedProposalChanges.value[id]
+    }
+    for (const proposal of proposals.value) {
+      const validIds = new Set(proposal.changes.map((change) => change.id))
+      const existing = selectedProposalChanges.value[proposal.id]
+      if (!existing) {
+        // Time is intentionally opt-in. The author must separately confirm a
+        // clock change even when approving the rest of a proposal.
+        selectedProposalChanges.value[proposal.id] = proposal.changes
+          .filter((change) => change.kind !== 'clock')
+          .map((change) => change.id)
+        continue
+      }
+      selectedProposalChanges.value[proposal.id] = existing.filter((id) => validIds.has(id))
+    }
   },
   { immediate: true },
 )
@@ -276,6 +306,60 @@ function saveEngine() {
   emit('save')
   lastRunLabel.value = '已保存'
 }
+
+function changeKindLabel(kind: WorldEngineChangeProposal['kind']) {
+  return ({
+    clock: '时间推进',
+    character: '角色后台状态',
+    relationship: '角色关系',
+    event: '事件',
+    timeline: '时间线',
+    note: '工作小结',
+  } as Record<WorldEngineChangeProposal['kind'], string>)[kind]
+}
+
+function changePatchSummary(change: WorldEngineChangeProposal) {
+  const patch = change.patch ?? {}
+  if (change.kind === 'clock') {
+    const target = typeof patch.targetTime === 'string' ? patch.targetTime : typeof patch.currentTime === 'string' ? patch.currentTime : ''
+    return target ? `目标时间：${target}` : '按已选择的时间跨度推进'
+  }
+  const details = Object.entries(patch)
+    .filter(([key, value]) => key !== 'evidence' && value !== undefined && value !== '')
+    .slice(0, 2)
+    .map(([key, value]) => `${key}：${Array.isArray(value) ? value.join('、') : String(value)}`)
+  return details.join(' · ')
+}
+
+function selectedChangeIds(proposal: WorldEngineProposal) {
+  return selectedProposalChanges.value[proposal.id] ?? []
+}
+
+function isProposalChangeSelected(proposal: WorldEngineProposal, change: WorldEngineChangeProposal) {
+  return selectedChangeIds(proposal).includes(change.id)
+}
+
+function toggleProposalChange(proposal: WorldEngineProposal, change: WorldEngineChangeProposal, checked: boolean) {
+  const selected = new Set(selectedChangeIds(proposal))
+  if (checked) selected.add(change.id)
+  else selected.delete(change.id)
+  selectedProposalChanges.value[proposal.id] = proposal.changes
+    .map((item) => item.id)
+    .filter((id) => selected.has(id))
+}
+
+function toggleAllProposalChanges(proposal: WorldEngineProposal) {
+  const selected = selectedChangeIds(proposal)
+  selectedProposalChanges.value[proposal.id] = selected.length === proposal.changes.length
+    ? []
+    : proposal.changes.map((change) => change.id)
+}
+
+function approveProposal(proposal: WorldEngineProposal) {
+  const selected = selectedChangeIds(proposal)
+  if (!selected.length) return
+  emit('approveProposal', proposal.id, selected)
+}
 </script>
 
 <template>
@@ -359,6 +443,7 @@ function saveEngine() {
       <div class="world-engine-source-list">
         <div v-for="source in sourceStats" :key="source.key" class="world-engine-source"><component :is="source.icon" :size="15" /><span>{{ source.label }}</span><strong>{{ source.count }}</strong></div>
       </div>
+      <ContextPreviewPanel :preview="props.contextPreview" :budget="props.contextBudget" compact title="世界引擎实际上下文" />
     </div>
 
     <nav class="world-engine-category-nav" aria-label="世界引擎分类">
@@ -451,7 +536,33 @@ function saveEngine() {
 
       <article class="world-engine-card">
         <div class="world-engine-card-head"><div><span class="eyebrow">审阅队列</span><h3>待确认提案</h3></div><span class="world-engine-card-count">{{ proposals.length }}</span></div>
-        <div v-if="proposals.length" class="world-engine-proposal-list"><div v-for="(proposal, index) in proposals.slice(0, 4)" :key="String(proposal.id ?? index)" class="world-engine-proposal"><ListChecks :size="14" /><span>{{ proposal.reasoning || proposalSummary(proposal) }}<small>{{ proposal.changes?.length ?? 0 }} 项变化</small></span><div class="world-engine-proposal-actions"><button class="button primary" type="button" @click="emit('approveProposal', String(proposal.id))">确认写入</button><button class="button secondary" type="button" @click="emit('rejectProposal', String(proposal.id))">丢弃</button></div></div></div>
+        <div v-if="proposals.length" class="world-engine-proposal-list">
+          <div v-for="(proposal, index) in proposals.slice(0, 4)" :key="String(proposal.id ?? index)" class="world-engine-proposal">
+            <ListChecks :size="14" />
+            <div class="world-engine-proposal-copy">
+              <span>{{ proposal.reasoning || proposalSummary(proposal) }}<small>{{ proposal.changes?.length ?? 0 }} 项变化 · 已选 {{ selectedChangeIds(proposal).length }} 项</small></span>
+              <details class="world-engine-proposal-details">
+                <summary>逐项审阅（时间推进需单独确认）</summary>
+                <div class="world-engine-change-list">
+                  <label v-for="change in proposal.changes" :key="change.id" class="world-engine-change">
+                    <input type="checkbox" :checked="isProposalChangeSelected(proposal, change)" @change="toggleProposalChange(proposal, change, ($event.target as HTMLInputElement).checked)" />
+                    <span class="world-engine-change-copy">
+                      <strong>{{ changeKindLabel(change.kind) }}</strong>
+                      <span>{{ change.summary }}</span>
+                      <small v-if="changePatchSummary(change)">{{ changePatchSummary(change) }}</small>
+                      <small v-if="change.kind === 'clock'" class="world-engine-clock-warning">需要单独确认，不会因批准其他变化而自动推进</small>
+                    </span>
+                  </label>
+                </div>
+                <button class="world-engine-select-all" type="button" @click="toggleAllProposalChanges(proposal)">{{ selectedChangeIds(proposal).length === proposal.changes.length ? '取消全选' : '全选（含时间）' }}</button>
+              </details>
+            </div>
+            <div class="world-engine-proposal-actions">
+              <button class="button primary" type="button" :disabled="selectedChangeIds(proposal).length === 0" @click="approveProposal(proposal)">确认写入 {{ selectedChangeIds(proposal).length }} 项</button>
+              <button class="button secondary" type="button" @click="emit('rejectProposal', String(proposal.id))">丢弃</button>
+            </div>
+          </div>
+        </div>
         <div v-else class="world-engine-empty"><ShieldCheck :size="16" /><span>没有待确认变化。世界引擎只会把审阅通过的提案提供给 Agent。</span></div>
       </article>
     </div>
@@ -479,6 +590,20 @@ function saveEngine() {
 .world-engine-time-reason svg { flex: 0 0 auto; color: var(--theme-button); }
 .world-engine-event-copy { min-width: 0; flex: 1; }
 .world-engine-event-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 6px; }
+.world-engine-proposal-copy { min-width: 0; flex: 1; }
+.world-engine-proposal-copy > span { display: block; min-width: 0; color: var(--theme-font); line-height: 1.45; }
+.world-engine-proposal-copy > span small { display: block; margin-top: 4px; color: var(--theme-muted); font-size: 9px; }
+.world-engine-proposal-details { margin-top: 8px; border-top: 1px solid var(--theme-border-soft); }
+.world-engine-proposal-details summary { padding-top: 7px; color: var(--theme-button); font-size: 10px; cursor: pointer; }
+.world-engine-change-list { display: grid; gap: 5px; margin-top: 7px; }
+.world-engine-change { display: flex; align-items: flex-start; gap: 7px; padding: 6px 7px; border: 1px solid var(--theme-border); border-radius: 5px; background: var(--theme-secondary); cursor: pointer; }
+.world-engine-change input { flex: 0 0 auto; margin-top: 2px; accent-color: var(--theme-button); }
+.world-engine-change-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; color: var(--theme-font); font-size: 10px; }
+.world-engine-change-copy strong { color: var(--theme-button); font-size: 9px; font-weight: 600; }
+.world-engine-change-copy span { overflow-wrap: anywhere; }
+.world-engine-change-copy small { color: var(--theme-muted); font-size: 9px; line-height: 1.35; overflow-wrap: anywhere; }
+.world-engine-clock-warning { color: var(--theme-warning, var(--theme-button)) !important; }
+.world-engine-select-all { margin-top: 7px; padding: 3px 0; border: 0; color: var(--theme-button); background: transparent; font: inherit; font-size: 10px; cursor: pointer; }
 .world-engine-outline-item { align-items: flex-start; }
 .world-engine-outline-item .world-engine-hook-status { margin-top: 1px; }
 .world-engine-outline-item .world-engine-hook-copy small { white-space: normal; line-height: 1.4; }

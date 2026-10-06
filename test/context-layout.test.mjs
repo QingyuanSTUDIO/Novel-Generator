@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { syncContextResourceItems } from '../src/data/seed.ts'
+import { estimateEnabledContextTokens, syncContextResourceItems } from '../src/data/seed.ts'
 
 function createStore() {
   return {
@@ -178,6 +178,28 @@ test('recomputes custom module tokens from live entries instead of entry-count p
   assert.ok(updated)
   assert.ok(updated.items[0].tokens > firstTokens)
   assert.equal(updated.tokens, updated.items[0].tokens)
+})
+
+test('enabled context token totals never fall back to stale group tokens when every child is disabled', () => {
+  const groups = [
+    contextGroup('ctx-world', 'world', [{
+      ...contextItem({ collection: 'world', resourceId: 'world-1', tokens: 42 }),
+      enabled: false,
+    }]),
+    contextGroup('ctx-chapter', 'chapter', [{
+      ...contextItem({ collection: 'chapter', tokens: 18 }),
+      enabled: false,
+    }]),
+    contextGroup('ctx-empty', 'custom', []),
+  ]
+  groups[0].tokens = 99999
+  groups[1].tokens = 88888
+  assert.equal(estimateEnabledContextTokens(groups), 0)
+
+  groups[0].items[0].enabled = true
+  assert.equal(estimateEnabledContextTokens(groups), 42)
+  groups[0].enabled = false
+  assert.equal(estimateEnabledContextTokens(groups), 0)
 })
 
 test('removes the obsolete flat context outlet from normalized layouts', () => {

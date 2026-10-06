@@ -1,4 +1,5 @@
 import type { MemeStore } from './data/memes'
+import type { AgentOperation } from './agent/schema'
 
 export type Resource = {
   id: string
@@ -110,6 +111,26 @@ export type CharacterImage = {
   name: string
   dataUrl: string
   createdAt: number
+  /**
+   * Portable reference for the desktop attachment store.
+   *
+   * The renderer still keeps `dataUrl` while an image is being edited.  A
+   * portfolio serializer may remove that inline payload and retain this
+   * reference instead; keeping the field optional preserves old inline
+   * snapshots and lets the migration happen at the file boundary.
+   */
+  attachment?: CharacterImageAttachmentRef
+}
+
+export type CharacterImageAttachmentRef = {
+  /** Stable file name/key in the portfolio's attachment store. */
+  assetId: string
+  /** Original data URL media type, for example `image/jpeg`. */
+  mimeType: string
+  /** Number of decoded bytes in the sidecar payload. */
+  byteLength: number
+  /** Optional integrity hash supplied by a future attachment writer. */
+  sha256?: string
 }
 
 /** How a context-capable resource is selected for a prompt. */
@@ -398,6 +419,56 @@ export type Store = {
   memes: MemeStore
 }
 
+/**
+ * The content boundary of one project inside a version 2 `.qy` portfolio.
+ *
+ * API providers and model lists are intentionally excluded from portable
+ * project data. Style rules live in `PortfolioSharedContent` because they
+ * are shared by every project in the same portfolio.
+ */
+export type PortfolioProjectContent = Omit<Omit<Omit<Store, 'providers' | 'modelOptions'>, 'style'>, 'resourceGroups'> & {
+  /** Style groups belong to PortfolioSharedContent, so this object cannot contain a style group. */
+  resourceGroups: Omit<Store['resourceGroups'], 'style'>
+}
+
+/** Content shared by every project in a `.qy` portfolio. */
+export type PortfolioSharedContent = {
+  styleRules: Resource[]
+  /** Folded / ordered style-rule groups shared by every project. */
+  styleGroups: ResourceGroup[]
+}
+
+export type PortfolioMetadata = {
+  id: string
+  title: string
+  createdAt: number
+  updatedAt: number
+  /** Empty string is used for a valid empty portfolio with no active project. */
+  activeProjectId: string
+}
+
+export type PortfolioProject = {
+  id: string
+  title: string
+  createdAt: number
+  updatedAt: number
+  content: PortfolioProjectContent
+}
+
+/**
+ * Portable `.qy` document contract. This is deliberately separate from the
+ * current in-memory `Store`: one file owns a portfolio and can contain many
+ * projects.
+ */
+export type PortfolioDocument = {
+  format: 'qy'
+  version: 2
+  kind: 'portfolio'
+  portfolio: PortfolioMetadata
+  sharedContent: PortfolioSharedContent
+  projects: PortfolioProject[]
+}
+
 export type AgentMessage = {
   id: string
   role: 'user' | 'assistant' | 'system'
@@ -452,19 +523,78 @@ export type AgentQuickAction = {
   prompt: string
 }
 
-import type { AgentOperation } from './agent/schema'
+export type AgentPlanDiffStatus = 'added' | 'changed' | 'cleared' | 'removed' | 'locked'
+
+/** One field-level before/after item shown before an Agent plan is approved. */
+export type AgentPlanFieldDiff = {
+  field: string
+  before?: unknown
+  after?: unknown
+  status: AgentPlanDiffStatus
+  locked?: boolean
+}
+
+/** Review metadata for one operation in a pending Agent plan. */
+export type AgentOperationReview = {
+  operationIndex: number
+  action: AgentOperation['action']
+  kind: 'create' | 'update' | 'delete' | 'move' | 'append' | 'search'
+  title: string
+  target?: string
+  /** Explicit current-work target path shown during approval. */
+  targetPath?: {
+    portfolioId?: string
+    projectId?: string
+    collection?: string
+  }
+  diffs: AgentPlanFieldDiff[]
+}
 
 export type AgentPlan = {
   id: string
   message: string
   operations: AgentOperation[]
   descriptions: string[]
+  /** Structured before/after data for human review. Older plans may omit it. */
+  reviews?: AgentOperationReview[]
+  /** Renderer-only selection carried into approval; omitted means approve all. */
+  approvedOperationIndexes?: number[]
   createdAt: number
   /** Snapshot fingerprint used to reject approval after the author edits the work. */
   storeFingerprint?: string
 }
 
-export type AgentSnapshot = Pick<Store, 'volumes' | 'chapters' | 'world' | 'characters' | 'items' | 'skills' | 'outline' | 'style' | 'resourceGroups' | 'worldEngine' | 'customModules' | 'memes' | 'contextBlocks' | 'contextGroups'>
+/**
+ * The content snapshot used by Agent rollback also keeps the renderer's
+ * selection state.  The optional UI fields are deliberately optional so
+ * history entries persisted before this contract was introduced remain
+ * readable; restoring such entries simply leaves the current selection in
+ * place.
+ */
+export type AgentSnapshot = Pick<Store, 'volumes' | 'chapters' | 'world' | 'characters' | 'items' | 'skills' | 'outline' | 'style' | 'resourceGroups' | 'worldEngine' | 'customModules' | 'memes' | 'contextBlocks' | 'contextGroups'> & {
+  activePage?: string
+  selectedChapterId?: string
+  selectedVolumeId?: string
+  selectedIds?: Record<string, string>
+  selectedGroupIds?: Record<string, string>
+  ungroupedCollapsed?: Record<string, boolean>
+}
+
+/**
+ * A compact inverse patch for an Agent history entry.
+ *
+ * The patch transforms the post-change snapshot back into the pre-change
+ * snapshot.  New entries may persist this instead of duplicating the complete
+ * content snapshot; `snapshot` remains optional for backwards compatibility
+ * with older .qy files and browser profiles.
+ */
+export type AgentHistoryPatchOperation = {
+  op: 'add' | 'remove' | 'replace'
+  /** JSON Pointer path relative to an AgentSnapshot. */
+  path: string
+  /** Value used by add/replace operations. */
+  value?: unknown
+}
 
 export type AgentHistoryEntry = {
   id: string
@@ -472,7 +602,22 @@ export type AgentHistoryEntry = {
   changes: string[]
   createdAt: number
   status: 'applied' | 'undone'
-  snapshot: AgentSnapshot
+  /** Full pre-change snapshot retained by legacy entries. */
+  snapshot?: AgentSnapshot
+  /** Compact inverse patch for newer entries. */
+  patch?: AgentHistoryPatchOperation[]
+  /**
+   * Where the change was approved. Older local profiles omit this field and
+   * are treated as native Agent executions when they are loaded.
+   */
+  source?: 'agent' | 'console' | 'manual'
+  /**
+   * The reviewed operation diffs that were actually approved. Keeping these
+   * separately from the rollback snapshot makes a persisted history entry
+   * useful as an audit record without requiring the author to open the old
+   * pending plan.
+   */
+  reviews?: AgentOperationReview[]
   /** Fingerprint of the work immediately after this Agent plan was applied. */
   afterFingerprint?: string
 }

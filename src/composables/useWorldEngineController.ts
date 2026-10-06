@@ -1,7 +1,11 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
 import { advanceWorldEngineClock, createDefaultWorldEngineState, formatWorldEngineContext, relationshipAllowed } from '../data/worldEngine.ts'
+import { formatAgentDataBlock } from '../agent/dataBoundary.ts'
 import { requestChat } from '../api/chat.ts'
 import { readModelSettings } from '../api/modelSettings.ts'
+import { prepareContextBudget } from '../api/contextBudget.ts'
+import { withContextPreviewMessages, type ContextPreviewSnapshot } from '../context/contextPreview.ts'
+import type { ChatMessage } from '../api/chat.ts'
 import type {
   Chapter,
   Resource,
@@ -151,6 +155,7 @@ type WorldEngineControllerOptions = {
   provider: ComputedRef<Resource | undefined>
   isApiConfigured: (resource: Resource) => boolean
   retrieveContextText: (query: string, cast: string[]) => string
+  retrieveContextPreview?: (query: string, cast: string[], provider?: Resource) => ContextPreviewSnapshot | null
   localApiUrl: (path: string) => string
   persist: () => void
 }
@@ -159,6 +164,8 @@ export function useWorldEngineController(options: WorldEngineControllerOptions) 
   const worldEngine = computed<WorldEngineState>(() => options.store.value.worldEngine ?? createDefaultWorldEngineState())
   const busy = ref(false)
   const error = ref('')
+  const contextPreview = ref<ContextPreviewSnapshot | null>(null)
+  const contextBudget = ref<ReturnType<typeof prepareContextBudget>['report'] | null>(null)
 
   function resolveCharacterId(value: unknown): string | undefined {
     if (typeof value !== 'string' || !value.trim()) return undefined
@@ -290,6 +297,22 @@ export function useWorldEngineController(options: WorldEngineControllerOptions) 
           : mode === 'day'
             ? '推进一天'
             : '推进一月'
+    const requestMessages: ChatMessage[] = [
+      { role: 'system', content: `你是小说世界引擎。根据当前章节正文、智能检索资料（其中包含与当前章节相关的大纲条目）和已确认的世界状态，推演正文之外的后台角色行动、天下大势、事件后果、关系变化，以及大纲目标的推进或偏离。大纲是剧情计划来源；不要把大纲复制成新的世界引擎条目，也不要新建协议中没有定义的资源。关系变化只记录主角与配角之间，路人角色不建立关系。当前正文出现的角色受现场保护，不要重复编造他们正在现场做的事。不要新写角色卡、道具卡、世界书或大纲事实；所有猜测都返回为待确认变化提案。只返回 JSON，不要 Markdown。JSON 必须符合：${JSON.stringify(schema)}\n\n本轮叙事时间推进方式由作者预先选择：${modeLabel}。当前模式为“保持当前时间”时，绝对不要提出改变时间的 clock 变化；其他模式不要按现实钟表换算推进，也不要自行改写 customDays。按章表示推演到下一章结束后的叙事时间，按天表示一天，按月表示一个月，自定义天数表示系统给出的天数。若能根据小说自定义历法可靠推导目标时间，可在 clock.patch.targetTime 返回目标时间；无法可靠计算时省略 targetTime，由系统保留推进跨度。clock.patch.reason 用一句话说明时间推进原因。` },
+      { role: 'user', content: `当前章节：\n${formatAgentDataBlock('world-engine-current-chapter', chapter ? { id: chapter.id, title: chapter.title, taskGoal: chapter.taskGoal, cast: chapter.cast, content: chapter.content } : null)}\n\n已确认世界引擎状态：\n${formatAgentDataBlock('world-engine-confirmed-state', formatWorldEngineContext(options.store.value.worldEngine) || '暂无')}\n\n本轮智能检索资料（大纲由这里提供）：\n${contextText || '暂无'}\n\n请只返回有依据的增量变化；没有把握的内容不要提出。` },
+    ]
+    const preview = options.retrieveContextPreview?.(`${chapter?.content ?? ''} ${chapter?.taskGoal ?? ''}`, options.effectiveCast.value, provider)
+    if (preview) {
+      try {
+        contextBudget.value = prepareContextBudget(requestMessages, readModelSettings(provider)).report
+      } catch {
+        contextBudget.value = null
+      }
+      contextPreview.value = withContextPreviewMessages(preview, requestMessages, contextBudget.value)
+    } else {
+      contextPreview.value = null
+      contextBudget.value = null
+    }
     const text = await requestChat(options.localApiUrl, {
         ...readModelSettings(provider),
         providerId: provider.id,
@@ -297,10 +320,7 @@ export function useWorldEngineController(options: WorldEngineControllerOptions) 
         baseUrl: provider.fields['接口地址'], apiKey: provider.fields['API Key'], protocol: provider.fields['协议'] ?? 'OpenAI Compatible', model: provider.fields['模型'], responseFormat: 'json_object',
         useProxy: provider.fields['使用代理'] === 'true', proxyHost: provider.fields['代理地址'] ?? '', proxyPort: provider.fields['代理端口'] ?? '',
         stream: provider.fields['流式输出'] !== 'false',
-        messages: [
-          { role: 'system', content: `你是小说世界引擎。根据当前章节正文、智能检索资料（其中包含与当前章节相关的大纲条目）和已确认的世界状态，推演正文之外的后台角色行动、天下大势、事件后果、关系变化，以及大纲目标的推进或偏离。大纲是剧情计划来源；不要把大纲复制成新的世界引擎条目，也不要新建协议中没有定义的资源。关系变化只记录主角与配角之间，路人角色不建立关系。当前正文出现的角色受现场保护，不要重复编造他们正在现场做的事。不要新写角色卡、道具卡、世界书或大纲事实；所有猜测都返回为待确认变化提案。只返回 JSON，不要 Markdown。JSON 必须符合：${JSON.stringify(schema)}\n\n本轮叙事时间推进方式由作者预先选择：${modeLabel}。当前模式为“保持当前时间”时，绝对不要提出改变时间的 clock 变化；其他模式不要按现实钟表换算推进，也不要自行改写 customDays。按章表示推演到下一章结束后的叙事时间，按天表示一天，按月表示一个月，自定义天数表示系统给出的天数。若能根据小说自定义历法可靠推导目标时间，可在 clock.patch.targetTime 返回目标时间；无法可靠计算时省略 targetTime，由系统保留推进跨度。clock.patch.reason 用一句话说明时间推进原因。` },
-          { role: 'user', content: `当前章节：${JSON.stringify(chapter ? { id: chapter.id, title: chapter.title, taskGoal: chapter.taskGoal, cast: chapter.cast, content: chapter.content } : null)}\n\n已确认世界引擎状态：\n${formatWorldEngineContext(options.store.value.worldEngine) || '暂无'}\n\n本轮智能检索资料（大纲由这里提供）：\n${contextText || '暂无'}\n\n请只返回有依据的增量变化；没有把握的内容不要提出。` },
-        ],
+        messages: requestMessages,
       })
     // Streaming is transport-only: fragments never become world state or a
     // proposal. Wait for a successful completion and validate the full JSON.
@@ -639,24 +659,52 @@ export function useWorldEngineController(options: WorldEngineControllerOptions) 
     }
   }
 
-  function approveProposal(id: string) {
+  function approveProposal(id: string, selectedChangeIds?: string[]) {
     const engine = options.store.value.worldEngine
     const proposal = engine?.pendingProposals.find((item) => item.id === id && item.status === 'pending')
     if (!engine || !proposal) return
+    const selected = selectedChangeIds === undefined
+      ? [...proposal.changes]
+      : proposal.changes.filter((change) => selectedChangeIds.includes(change.id))
+    // The panel disables the action when no change is selected, but keep the
+    // controller safe for CLI and older callers that may pass an empty list.
+    if (!selected.length) return
+    const selectedSet = new Set(selected.map((change) => change.id))
+    const clockChange = selected.find((change) => change.kind === 'clock')
+    selected.filter((change) => change.kind !== 'clock').forEach(applyChange)
     /*
-     * The selected span is applied exactly once when the author approves the
-     * proposal. A model may omit a clock change when it cannot name a target
-     * in a fictional calendar; the configured span still remains explicit in
-     * the confirmed clock state.
+     * Narrative time is an explicit proposal change. Approving an event,
+     * character update, or note must not silently advance the clock merely
+     * because the author selected a default span for a future run. The clock
+     * is updated only when this proposal contains its own reviewed `clock`
+     * change; a missing clock change leaves both the time label and revision
+     * untouched.
      */
-    const clockChange = proposal.changes.find((change) => change.kind === 'clock')
-    proposal.changes.filter((change) => change.kind !== 'clock').forEach(applyChange)
-    applyClockChange(clockChange?.patch)
-    engine.timeline.unshift({ id: `engine-timeline-${Date.now()}`, title: options.activeChapter.value?.title ?? '当前章节', summary: proposal.reasoning, time: engine.clock.label, chapterId: proposal.sourceChapterId, source: 'engine', eventIds: proposal.changes.filter((change) => change.kind === 'event').map((change) => change.targetId), createdAt: Date.now() })
-    proposal.status = 'accepted'
-    proposal.decidedAt = Date.now()
-    engine.lastProcessedChapterId = proposal.sourceChapterId
-    engine.status = 'idle'
+    if (clockChange) applyClockChange(clockChange.patch)
+    const remaining = proposal.changes.filter((change) => !selectedSet.has(change.id))
+    const decidedAt = Date.now()
+    engine.timeline.unshift({
+      id: `engine-timeline-${decidedAt}`,
+      title: options.activeChapter.value?.title ?? '当前章节',
+      summary: proposal.reasoning,
+      time: engine.clock.label,
+      chapterId: proposal.sourceChapterId,
+      source: 'engine',
+      eventIds: selected.filter((change) => change.kind === 'event').map((change) => change.targetId),
+      createdAt: decidedAt,
+    })
+    if (remaining.length) {
+      // Partial approval keeps the unselected changes available for a later
+      // review instead of silently discarding them.
+      proposal.changes = remaining
+      proposal.decidedAt = undefined
+      engine.status = 'awaiting-review'
+    } else {
+      proposal.status = 'accepted'
+      proposal.decidedAt = decidedAt
+      engine.lastProcessedChapterId = proposal.sourceChapterId
+      engine.status = 'idle'
+    }
     engine.updatedAt = Date.now()
     options.persist()
   }
@@ -672,5 +720,5 @@ export function useWorldEngineController(options: WorldEngineControllerOptions) 
     options.persist()
   }
 
-  return { worldEngine, busy, error, run, updateClock, updateTimeSpan, addEvent, updateEventReviewStatus, toggleEventReviewStatusLock, toggleEventLockAll, approveProposal, rejectProposal }
+  return { worldEngine, busy, error, contextPreview, contextBudget, run, updateClock, updateTimeSpan, addEvent, updateEventReviewStatus, toggleEventReviewStatusLock, toggleEventLockAll, approveProposal, rejectProposal }
 }
